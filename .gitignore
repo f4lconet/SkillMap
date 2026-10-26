@@ -1,0 +1,54 @@
+# ==========================================
+# 1. Системные файлы и IDE
+# ==========================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ==========================================
+# 2. Секреты и Переменные окружения (ОБЯЗАТЕЛЬНО)
+# ==========================================
+.env
+.env*.local
+.env.production
+.env.development
+
+# ==========================================
+# 3. Python / FastAPI (Backend)
+# ==========================================
+# Виртуальные окружения
+.venv/
+venv/
+ENV/
+env/
+
+# Кэш Python и временные файлы
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# ==========================================
+# 4. Node.js / Next.js (Frontend)
+# ==========================================
+# Зависимости
+node_modules/
+apps/frontend/node_modules/
+
+# Результат сборки Next.js
+.next/
+out/
+build/
+dist/
+
+# Логи и кэш сборки
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.turbo/
