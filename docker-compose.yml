@@ -1,0 +1,44 @@
+# Локально поднимаются только postgres и mailpit, а бэкенд запускается через npm run dev.
+# Полный стек в контейнерах: docker compose --profile full up --build
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: skillmap
+      POSTGRES_PASSWORD: skillmap
+      POSTGRES_DB: skillmap
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skillmap -d skillmap"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # веб-интерфейс с письмами
+
+  backend:
+    profiles: ["full"]
+    build: ./apps/backend
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://skillmap:skillmap@postgres:5432/skillmap
+      SECRET_KEY: dev-secret-key-change-me-please
+      CORS_ORIGINS: '["http://localhost:3000"]'
+      FRONTEND_URL: http://localhost:3000
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
