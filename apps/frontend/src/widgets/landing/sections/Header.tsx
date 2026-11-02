@@ -20,7 +20,7 @@ export function Header() {
           <Link href="#how" className="transition-colors hover:text-text">
             Как это работает
           </Link>
-          <Link href="#catalog" className="transition-colors hover:text-text">
+          <Link href="/catalog" className="transition-colors hover:text-text">
             Каталог профессий
           </Link>
           <Link href="/demo" className="transition-colors hover:text-text">
