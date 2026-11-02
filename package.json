@@ -3,7 +3,11 @@
   "version": "1.0.0",
   "description": "",
   "private": true,
-  "workspaces": ["apps/frontend", "apps/backend", "packages/*"],
+  "workspaces": [
+    "apps/frontend",
+    "apps/backend",
+    "packages/*"
+  ],
   "main": "index.js",
   "scripts": {
     "dev:frontend": "npm --prefix apps/frontend run dev",
@@ -14,5 +18,8 @@
   "type": "commonjs",
   "devDependencies": {
     "concurrently": "^10.0.6"
+  },
+  "dependencies": {
+    "axios": "^1.21.0"
   }
 }
