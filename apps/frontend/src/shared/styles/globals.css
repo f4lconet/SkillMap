@@ -1,0 +1,58 @@
+@import 'tailwindcss';
+@config '../../../tailwind.config.ts';
+
+:root {
+  /* Colors from UI-kit */
+  --color-accent: #5357D9;
+  --color-text: #182137;
+  --color-secondary: #707B91;
+  --color-page: #F6F7FB;
+  --color-surface: #FFFFFF;
+  --color-border: #E3E7F0;
+  --color-accent-soft: #EEEDFF;
+  --color-success: #218166;
+  --color-success-soft: #E7F5EE;
+  --color-warning: #A66B17;
+  --color-danger: #C24A56;
+  --color-danger-soft: #FCEEF0;
+
+  /* Focus */
+  --color-focus-ring: rgba(83, 87, 217, 0.33);
+
+  /* Typography */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  /* Shadows */
+  --shadow-soft: 0 4px 10px rgba(24, 33, 55, 0.04);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    color: var(--color-text);
+    background-color: var(--color-page);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    min-height: 100vh;
+  }
+
+  /* Focus visible for accessibility */
+  *:focus-visible {
+    outline: 3px solid var(--color-focus-ring);
+    outline-offset: 0;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

@@ -1,0 +1,18 @@
+# Cursor / AI coding rules for SkillMap
+
+You are working on the SkillMap project (interactive skill map for students).
+
+ALWAYS read and follow:
+1. AGENTS.md (root) — primary source of truth
+2. docs/ folder for domain, architecture, API, UI-kit, MVP scope
+
+Key constraints:
+- Stack: Next.js (App Router) + TypeScript + Tailwind + FSD | FastAPI + PostgreSQL
+- Structure: apps/frontend + apps/backend
+- Only implement MVP Must features (see docs/06-mvp-scope.md)
+- Use existing UI-kit tokens and components (docs/04-ui-kit.md)
+- Russian UI texts
+- Do not invent features outside scope
+- Follow FSD import rules strictly
+
+When in doubt — check AGENTS.md and the relevant docs file before writing code.

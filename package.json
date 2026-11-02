@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "private": true,
+  "workspaces": ["apps/frontend", "apps/backend", "packages/*"],
   "main": "index.js",
   "scripts": {
     "dev:frontend": "npm --prefix apps/frontend run dev",
