@@ -53,7 +53,7 @@ class PasswordResetConfirm(BaseModel):
 
 
 class EmailVerifyRequest(BaseModel):
-    token: Annotated[str, StringConstraints(min_length=10, max_length=200)]
+    token: Annotated[str, StringConstraints(min_length=10, max_length=4096)]
 
 
 class MessageResponse(BaseModel):
