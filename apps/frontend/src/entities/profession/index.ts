@@ -1,9 +1,9 @@
 export type {
   Profession,
-  ProfessionDirection,
+  ProfessionDetail,
   ProfessionLevel,
+  ProfessionList,
 } from './model/types';
-export { DIRECTION_LABELS, LEVEL_LABELS } from './model/types';
+export { LEVEL_LABELS } from './model/types';
 export { professionApi } from './api/professionApi';
 export type { ProfessionFilters } from './api/professionApi';
-export { MOCK_PROFESSIONS } from './api/mockProfessions';

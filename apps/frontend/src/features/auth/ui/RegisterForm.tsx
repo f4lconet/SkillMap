@@ -4,7 +4,6 @@ import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Input, Checkbox } from '@/shared/ui';
 import { authApi } from '../api/authApi';
-import { GitHubButton } from './GitHubButton';
 
 export function RegisterForm() {
   const router = useRouter();
@@ -22,6 +21,10 @@ export function RegisterForm() {
     if (!email.trim()) next.email = 'Укажите email';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) next.email = 'Некорректный email';
     if (password.length < 8) next.password = 'Не менее 8 символов';
+    else if (password.length > 128) next.password = 'Не более 128 символов';
+    else if (!/[a-zA-Zа-яА-Я]/.test(password) || !/\d/.test(password)) {
+      next.password = 'Нужны хотя бы одна буква и одна цифра';
+    }
     if (!acceptTerms) next.terms = 'Нужно принять условия';
     setFieldErrors(next);
     return Object.keys(next).length === 0;
@@ -50,17 +53,7 @@ export function RegisterForm() {
       <h2 className="text-h3 text-text">Создать аккаунт</h2>
       <p className="mt-1 text-body text-secondary">Ваш маршрут начнётся здесь.</p>
 
-      <div className="mt-6">
-        <GitHubButton mode="register" className="w-full" />
-      </div>
-
-      <div className="my-5 flex items-center gap-3">
-        <div className="h-px flex-1 bg-border" />
-        <span className="text-helper text-secondary">или по электронной почте</span>
-        <div className="h-px flex-1 bg-border" />
-      </div>
-
-      <form onSubmit={onSubmit} className="flex flex-1 flex-col gap-4">
+      <form onSubmit={onSubmit} className="mt-6 flex flex-1 flex-col gap-4">
         <Input
           label="Имя"
           name="name"
@@ -92,7 +85,7 @@ export function RegisterForm() {
           onChange={(e) => setPassword(e.target.value)}
           error={Boolean(fieldErrors.password)}
           errorText={fieldErrors.password}
-          helperText={!fieldErrors.password ? 'Не менее 8 символов' : undefined}
+          helperText={!fieldErrors.password ? 'Не менее 8 символов, буквы и цифры' : undefined}
           leftIcon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="3" y="11" width="18" height="11" rx="2" />

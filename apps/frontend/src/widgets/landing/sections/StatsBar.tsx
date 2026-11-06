@@ -6,7 +6,7 @@ export function StatsBar() {
       highlight: false,
     },
     {
-      value: '12',
+      value: '10',
       label: 'профессий в каталоге',
       highlight: true,
     },

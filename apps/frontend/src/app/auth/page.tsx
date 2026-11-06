@@ -73,17 +73,6 @@ export default function AuthPage() {
           <LoginForm />
         </div>
 
-        {/* Demo hint for mock */}
-        <p className="mt-8 text-center text-helper text-secondary">
-          Демо-вход (mock):{' '}
-          <code className="rounded bg-surface px-1.5 py-0.5 text-text">
-            elena.smirnova@example.com
-          </code>{' '}
-          /{' '}
-          <code className="rounded bg-surface px-1.5 py-0.5 text-text">
-            password1
-          </code>
-        </p>
       </main>
     </div>
   );

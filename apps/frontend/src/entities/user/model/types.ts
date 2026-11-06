@@ -1,20 +1,29 @@
 export type UserLevel = 'beginner' | 'intermediate' | 'advanced';
+export type UserRole = 'student' | 'editor';
+
+export interface ProfessionBrief {
+  id: string;
+  title: string;
+}
 
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'student' | 'editor' | 'admin';
-  level?: UserLevel | null;
-  hours_per_week?: number | null;
-  target_profession_id?: string | null;
-  created_at?: string;
+  role: UserRole;
+  level: UserLevel | null;
+  hoursPerWeek: number | null;
+  onboardingCompleted: boolean;
+  isEmailVerified: boolean;
+  targetProfession: ProfessionBrief | null;
 }
 
+/** Ответ /auth/login, /auth/register и /auth/refresh. */
 export interface AuthTokens {
-  access_token: string;
-  refresh_token: string;
-  token_type?: string;
+  accessToken: string;
+  tokenType: string;
+  expiresIn: number;
+  emailVerified: boolean;
 }
 
 export interface AuthResponse extends AuthTokens {
@@ -35,4 +44,16 @@ export interface LoginPayload {
 
 export interface ForgotPasswordPayload {
   email: string;
+}
+
+export interface MessageResponse {
+  detail: string;
+}
+
+export interface UserUpdatePayload {
+  name?: string;
+  level?: UserLevel | null;
+  hoursPerWeek?: number | null;
+  targetProfessionId?: string | null;
+  onboardingCompleted?: true;
 }

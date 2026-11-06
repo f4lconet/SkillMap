@@ -1,13 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   professionApi,
-  DIRECTION_LABELS,
   LEVEL_LABELS,
   type Profession,
-  type ProfessionDirection,
   type ProfessionLevel,
 } from '@/entities/profession';
 import { Button } from '@/shared/ui';
@@ -15,60 +13,80 @@ import { CatalogProfessionCard } from '@/features/catalog/ui/CatalogProfessionCa
 import { cn } from '@/shared/lib/cn';
 import { authApi } from '@/features/auth';
 
-const DIRECTION_CHIPS: Array<{ key: ProfessionDirection | 'all'; label: string }> = [
-  { key: 'all', label: 'Все профессии' },
-  { key: 'development', label: 'Разработка' },
-  { key: 'analytics', label: 'Аналитика' },
-  { key: 'design', label: 'Дизайн' },
-  { key: 'infrastructure', label: 'Инфраструктура' },
-  { key: 'product', label: 'Продукт' },
-];
-
 export function CatalogPage() {
   const [list, setList] = useState<Profession[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [direction, setDirection] = useState<ProfessionDirection | 'all'>('all');
+  const [direction, setDirection] = useState<string | 'all'>('all');
   const [level, setLevel] = useState<ProfessionLevel | 'all'>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState('');
+  const [directions, setDirections] = useState<string[]>([]);
+  const [counts, setCounts] = useState<Record<string, number>>({ all: 0 });
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
 
-  // counts always from full catalog (mock)
-  const counts = useMemo(() => professionApi.getDirectionCounts(), []);
+  const requestKey = `${search}|${direction}|${level}`;
+  const loading = loadedKey !== requestKey;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await professionApi.list({
-        search,
-        direction,
-        level,
+  useEffect(() => {
+    let cancelled = false;
+    professionApi
+      .list({ search, direction, level })
+      .then((data) => {
+        if (cancelled) return;
+        setList(data);
+        setError(null);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setList([]);
+        setError(err instanceof Error ? err.message : 'Не удалось загрузить профессии');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadedKey(requestKey);
       });
-      setList(data);
-    } finally {
-      setLoading(false);
-    }
-  }, [search, direction, level]);
+    return () => {
+      cancelled = true;
+    };
+  }, [search, direction, level, requestKey]);
 
+  // Справочник направлений и счётчики — из бэкенда
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    Promise.all([professionApi.getDirections(), professionApi.getDirectionCounts()])
+      .then(([items, nextCounts]) => {
+        if (cancelled) return;
+        setDirections(items);
+        setCounts(nextCounts);
+      })
+      .catch(() => {
+        /* чипы просто не покажутся */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  // restore selected goal from mock session if any
+  // Восстанавливаем цель из профиля пользователя
   useEffect(() => {
-    const user = authApi.getCurrentUser();
-    if (user?.target_profession_id) {
-      setSelectedId(user.target_profession_id);
-    } else if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('skillmap_selected_profession');
-      if (saved) setSelectedId(saved);
-    }
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      const user = authApi.getCurrentUser();
+      if (!cancelled && user?.targetProfession?.id) {
+        setSelectedId(user.targetProfession.id);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('skillmap_selected_profession', id);
+    if (authApi.getAccessToken()) {
+      authApi.setTargetProfession(id).catch(() => {
+        /* цель сохранится локально, повторим при следующем выборе */
+      });
     }
   };
 
@@ -127,7 +145,8 @@ export function CatalogPage() {
           Кем вы хотите стать?
         </h1>
         <p className="mt-2 text-body text-secondary">
-          12 профессий, понятные требования и карта навыков для каждой цели.
+          {counts.all > 0 ? `${counts.all} профессий` : 'Профессии'}, понятные требования
+          и карта навыков для каждой цели.
         </p>
 
         {/* Filters */}
@@ -158,15 +177,13 @@ export function CatalogPage() {
             <label className="mb-1.5 block text-label text-text">Направление</label>
             <select
               value={direction}
-              onChange={(e) =>
-                setDirection(e.target.value as ProfessionDirection | 'all')
-              }
+              onChange={(e) => setDirection(e.target.value)}
               className="h-12 w-full appearance-none rounded-md border border-border bg-surface px-4 text-body text-text outline-none focus:border-accent focus:ring-[3px] focus:ring-[rgba(83,87,217,0.33)]"
             >
               <option value="all">Все направления</option>
-              {(Object.keys(DIRECTION_LABELS) as ProfessionDirection[]).map((key) => (
-                <option key={key} value={key}>
-                  {DIRECTION_LABELS[key]}
+              {directions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
                 </option>
               ))}
             </select>
@@ -195,26 +212,27 @@ export function CatalogPage() {
 
         {/* Direction chips */}
         <div className="mt-5 flex flex-wrap gap-2">
-          {DIRECTION_CHIPS.map((chip) => {
-            const count =
-              chip.key === 'all' ? counts.all : counts[chip.key] || 0;
-            const active = direction === chip.key;
-            return (
-              <button
-                key={chip.key}
-                type="button"
-                onClick={() => setDirection(chip.key)}
-                className={cn(
-                  'rounded-full px-3 py-1.5 text-helper font-medium transition-colors',
-                  active
-                    ? 'bg-accent-soft text-accent'
-                    : 'bg-surface text-secondary hover:bg-page'
-                )}
-              >
-                {chip.label} · {count}
-              </button>
-            );
-          })}
+          {[{ key: 'all', label: 'Все профессии' }, ...directions.map((name) => ({ key: name, label: name }))].map(
+            (chip) => {
+              const count = counts[chip.key] ?? 0;
+              const active = direction === chip.key;
+              return (
+                <button
+                  key={chip.key}
+                  type="button"
+                  onClick={() => setDirection(chip.key)}
+                  className={cn(
+                    'rounded-full px-3 py-1.5 text-helper font-medium transition-colors',
+                    active
+                      ? 'bg-accent-soft text-accent'
+                      : 'bg-surface text-secondary hover:bg-page'
+                  )}
+                >
+                  {chip.label} · {count}
+                </button>
+              );
+            }
+          )}
         </div>
 
         {/* Grid */}
@@ -226,7 +244,12 @@ export function CatalogPage() {
                 className="h-52 animate-pulse rounded-2xl border border-border bg-surface"
               />
             ))}
-          {!loading && list.length === 0 && (
+          {!loading && error && (
+            <div className="col-span-full rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-body text-danger">
+              {error}
+            </div>
+          )}
+          {!loading && !error && list.length === 0 && (
             <p className="col-span-full py-12 text-center text-body text-secondary">
               Ничего не найдено. Попробуйте сбросить фильтры.
             </p>

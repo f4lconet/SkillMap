@@ -8,6 +8,9 @@
  *
  * Токен подставляется автоматически из authStorage (если есть).
  * Базовый URL: NEXT_PUBLIC_API_URL (по умолчанию /api/v1).
+ *
+ * Ключи в коде всегда camelCase: конвертацию в snake_case на бэкенде и обратно
+ * делает axios-case-converter (см. axiosInstance ниже).
  */
 
 import axios, {
@@ -16,6 +19,7 @@ import axios, {
   type AxiosRequestConfig,
   type InternalAxiosRequestConfig,
 } from 'axios';
+import applyCaseMiddleware from 'axios-case-converter';
 
 export interface ApiError {
   status: number;
@@ -38,14 +42,24 @@ export class ApiClientError extends Error {
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '/api/v1';
 
-export const axiosInstance: AxiosInstance = axios.create({
-  baseURL: API_BASE,
-  timeout: 15_000,
-  headers: {
-    Accept: 'application/json',
-    'Content-Type': 'application/json',
-  },
-});
+/**
+ * snake_case <-> camelCase на границе с бэкендом:
+ * исходящие `data`/`params` уходят в snake_case, ответы приходят в camelCase.
+ * Заголовки не трогаем — Authorization/Content-Type выставляем сами.
+ */
+export const axiosInstance: AxiosInstance = applyCaseMiddleware(
+  axios.create({
+    baseURL: API_BASE,
+    timeout: 15_000,
+    // refresh-токен передаётся httpOnly-cookie на /api/v1/auth
+    withCredentials: true,
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+  }),
+  { ignoreHeaders: true }
+);
 
 /** Лениво читаем токен, чтобы не тянуть auth в circular import на SSR */
 function getAccessToken(): string | null {
@@ -72,17 +86,39 @@ axiosInstance.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
+type ApiErrorBody = {
+  detail?: string | Array<{ msg?: string; loc?: Array<string | number> }>;
+  errors?: Array<{ field?: string; message?: string }>;
+  message?: string;
+};
+
+function extractMessage(data: ApiErrorBody | undefined, fallback: string): string {
+  if (!data) return fallback;
+  if (typeof data.detail === 'string' && data.detail) return data.detail;
+  if (Array.isArray(data.errors) && data.errors.length > 0) {
+    const first = data.errors[0];
+    if (first?.message) {
+      return first.field ? `${first.field}: ${first.message}` : first.message;
+    }
+  }
+  if (Array.isArray(data.detail) && data.detail.length > 0) {
+    const first = data.detail[0];
+    if (first?.msg) return first.msg;
+  }
+  if (typeof data.message === 'string' && data.message) return data.message;
+  return fallback;
+}
+
 function toApiError(error: unknown): ApiClientError {
   if (axios.isAxiosError(error)) {
-    const ax = error as AxiosError<{ detail?: string; message?: string }>;
+    const ax = error as AxiosError<ApiErrorBody>;
     const status = ax.response?.status ?? 0;
     const data = ax.response?.data;
-    const message =
-      (typeof data?.detail === 'string' && data.detail) ||
-      (typeof data?.message === 'string' && data.message) ||
-      ax.message ||
-      'Request failed';
-    return new ApiClientError({ status, message, details: data });
+    return new ApiClientError({
+      status,
+      message: extractMessage(data, ax.message || 'Request failed'),
+      details: data,
+    });
   }
   if (error instanceof ApiClientError) return error;
   return new ApiClientError({
@@ -96,7 +132,28 @@ type RequestConfig = AxiosRequestConfig & {
   token?: string | null;
 };
 
-async function request<T>(config: RequestConfig): Promise<T> {
+/** Обновляет access-токен по httpOnly-cookie. Возвращает null, если сессии нет. */
+async function refreshAccessToken(): Promise<string | null> {
+  try {
+    const res = await axiosInstance.post<{ accessToken: string }>('/auth/refresh');
+    const token = res.data?.accessToken;
+    if (!token) return null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { authStorage } = require('@/features/auth/model/storage') as {
+        authStorage: { setAccessToken: (value: string) => void };
+      };
+      authStorage.setAccessToken(token);
+    } catch {
+      /* storage недоступен на SSR */
+    }
+    return token;
+  } catch {
+    return null;
+  }
+}
+
+async function request<T>(config: RequestConfig, isRetry = false): Promise<T> {
   try {
     const { token, ...rest } = config;
     const res = await axiosInstance.request<T>({
@@ -108,7 +165,13 @@ async function request<T>(config: RequestConfig): Promise<T> {
     });
     return res.data;
   } catch (err) {
-    throw toApiError(err);
+    const apiError = toApiError(err);
+    const isAuthRoute = config.url?.startsWith('/auth/') ?? false;
+    if (apiError.status === 401 && !isRetry && !isAuthRoute && !config.token) {
+      const token = await refreshAccessToken();
+      if (token) return request<T>(config, true);
+    }
+    throw apiError;
   }
 }
 

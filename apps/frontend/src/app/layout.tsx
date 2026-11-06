@@ -21,7 +21,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ru" className={inter.variable}>
-      <body className="min-h-screen bg-page font-sans text-text antialiased">
+      <body
+        className="min-h-screen bg-page font-sans text-text antialiased"
+        suppressHydrationWarning
+      >
         {children}
       </body>
     </html>

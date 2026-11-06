@@ -50,7 +50,7 @@ export function ProfessionsPreview() {
           </div>
           <Link href="/catalog">
             <Button variant="secondary" size="sm">
-              → Все 12 профессий
+              → Все профессии
             </Button>
           </Link>
         </div>

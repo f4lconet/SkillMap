@@ -4,7 +4,6 @@ import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Input, Checkbox } from '@/shared/ui';
 import { authApi } from '../api/authApi';
-import { GitHubButton } from './GitHubButton';
 
 export function LoginForm() {
   const router = useRouter();
@@ -39,7 +38,7 @@ export function LoginForm() {
         remember,
       });
       authApi.persistSession(res, remember);
-      router.push('/map'); // после входа — к карте (или дашборду)
+      router.push('/catalog'); // после входа — к выбору профессии
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Не удалось войти';
       setError(message);
@@ -57,8 +56,8 @@ export function LoginForm() {
     }
     setForgotLoading(true);
     try {
-      await authApi.forgotPassword({ email: email.trim() });
-      setForgotMessage('Если аккаунт существует, ссылка отправлена на email.');
+      const message = await authApi.forgotPassword({ email: email.trim() });
+      setForgotMessage(message);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось отправить ссылку');
     } finally {
@@ -73,17 +72,7 @@ export function LoginForm() {
         Продолжите с того места, где остановились.
       </p>
 
-      <div className="mt-6">
-        <GitHubButton mode="login" className="w-full" />
-      </div>
-
-      <div className="my-5 flex items-center gap-3">
-        <div className="h-px flex-1 bg-border" />
-        <span className="text-helper text-secondary">или по электронной почте</span>
-        <div className="h-px flex-1 bg-border" />
-      </div>
-
-      <form onSubmit={onSubmit} className="flex flex-1 flex-col gap-4">
+      <form onSubmit={onSubmit} className="mt-6 flex flex-1 flex-col gap-4">
         <Input
           label="Электронная почта"
           name="email"
