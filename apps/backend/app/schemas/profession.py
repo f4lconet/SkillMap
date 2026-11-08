@@ -24,6 +24,7 @@ class ProfessionCard(BaseModel):
     skills_count: int
     estimated_weeks: int
     is_priority: bool
+    skills_ready: bool = False
 
 
 class ProfessionDetail(ProfessionCard):

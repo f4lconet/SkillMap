@@ -37,7 +37,26 @@ async def get_current_user(
     return user
 
 
+async def get_optional_user(
+    db: DbSession,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+) -> User | None:
+    """Возвращает пользователя или None (для гостевых эндпоинтов)."""
+    if credentials is None:
+        return None
+    try:
+        payload = decode_access_token(credentials.credentials)
+        user_id = uuid.UUID(payload["sub"])
+    except (TokenError, ValueError):
+        return None
+    user = await db.get(User, user_id)
+    if user is None or not user.is_active:
+        return None
+    return user
+
+
 CurrentUser = Annotated[User, Depends(get_current_user)]
+OptionalUser = Annotated[User | None, Depends(get_optional_user)]
 
 
 def require_role(*roles: UserRole):

@@ -1,6 +1,8 @@
 from typing import Annotated
+import secrets
 
-from fastapi import APIRouter, BackgroundTasks, Cookie, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Cookie, HTTPException, Query, Response, status
+from fastapi.responses import RedirectResponse
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import get_settings
@@ -15,6 +17,7 @@ from app.schemas.auth import (
 )
 from app.services import auth as auth_service
 from app.services.email import send_password_reset_email, send_verification_email
+from app.services import github_oauth as gh_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -126,3 +129,30 @@ async def resend_verification(
         return MessageResponse(detail="Email уже подтверждён")
     background_tasks.add_task(send_verification_email, user.email, raw)
     return MessageResponse(detail="Письмо отправлено повторно")
+
+
+@router.get("/github")
+async def github_login():
+    """Редирект на GitHub OAuth."""
+    state = secrets.token_urlsafe(16)
+    url = gh_service.build_github_authorize_url(state)
+    return RedirectResponse(url)
+
+
+@router.get("/github/callback")
+async def github_callback(
+    response: Response,
+    db: DbSession,
+    code: str = Query(...)
+):
+    settings = get_settings()
+    try:
+        user, access, refresh = await gh_service.login_or_register_via_github(db, code)
+    except Exception:
+        return RedirectResponse(f"{settings.frontend_url}/auth?error=github_failed")
+    _set_refresh_cookie(response, refresh)
+    redirect_url = (
+        f"{settings.frontend_url}/auth/callback"
+        f"?access_token={access}&email_verified=true"
+    )
+    return RedirectResponse(redirect_url, headers=dict(response.headers))

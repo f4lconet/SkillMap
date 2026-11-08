@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     smtp_port: int = 1025
     mail_from: str = "SkillMap <no-reply@skillmap.local>"
 
+    # GitHub OAuth
+    github_client_id: str | None = None
+    github_client_secret: str | None = None
+    github_redirect_uri: str | None = None
+
     @property
     def is_development(self) -> bool:
         return self.environment == "development"
