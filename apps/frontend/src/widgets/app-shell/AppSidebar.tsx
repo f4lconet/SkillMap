@@ -6,7 +6,7 @@ import { cn } from '@/shared/lib/cn';
 import { Progress } from '@/shared/ui';
 
 const NAV = [
-  { href: '/map', label: 'Карта', icon: 'map', ready: false },
+  { href: '/map', label: 'Карта', icon: 'map', ready: true },
   { href: '/trajectory', label: 'Траектория', icon: 'path', ready: false },
   { href: '/gap', label: 'Gap Analysis', icon: 'gap', ready: false },
   { href: '/dashboard', label: 'Дашборд', icon: 'chart', ready: false },

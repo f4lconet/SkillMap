@@ -2,6 +2,9 @@
 export { Button } from './button';
 export type { ButtonProps, ButtonVariant, ButtonSize } from './button';
 
+// Icons
+export { ShareIcon } from './icon';
+
 // Forms
 export { Input } from './input';
 export type { InputProps, InputState } from './input';

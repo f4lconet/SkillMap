@@ -56,3 +56,15 @@
     text-wrap: balance;
   }
 }
+
+/*
+ * Edges of the skill map. The class is applied to the edge <g>, so the opacity
+ * affects both the line and the arrow head (marker).
+ */
+.skill-edge {
+  transition: opacity 150ms ease;
+}
+
+.skill-edge-dimmed {
+  opacity: 0.28;
+}

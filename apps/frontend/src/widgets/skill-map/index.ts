@@ -1,0 +1,1 @@
+export { SkillMapPage } from './SkillMapPage';
