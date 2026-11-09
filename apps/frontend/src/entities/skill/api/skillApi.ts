@@ -1,5 +1,11 @@
 import { api } from '@/shared/api';
-import type { ProfessionMap, SkillStatus, UserSkill } from '../model/types';
+import type {
+  GapAnalysis,
+  ProfessionMap,
+  SkillStatus,
+  Trajectory,
+  UserSkill,
+} from '../model/types';
 
 export const skillApi = {
   /** GET /professions/{profession_id}/map */
@@ -22,5 +28,15 @@ export const skillApi = {
       status,
       selfScore: selfScore ?? null,
     });
+  },
+
+  /** GET /me/gap/{profession_id} */
+  getGap(professionId: string): Promise<GapAnalysis> {
+    return api.get<GapAnalysis>(`/me/gap/${professionId}`);
+  },
+
+  /** GET /me/trajectory/{profession_id} */
+  getTrajectory(professionId: string): Promise<Trajectory> {
+    return api.get<Trajectory>(`/me/trajectory/${professionId}`);
   },
 };

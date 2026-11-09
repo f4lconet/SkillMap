@@ -1,6 +1,18 @@
 export type UserLevel = 'beginner' | 'intermediate' | 'advanced';
 export type UserRole = 'student' | 'editor';
 
+/** Подписи к API-значениям уровня (junior/middle/senior — только в UI). */
+export const USER_LEVEL_LABELS: Record<UserLevel, string> = {
+  beginner: 'Junior',
+  intermediate: 'Middle',
+  advanced: 'Senior',
+};
+
+export const USER_ROLE_LABELS: Record<UserRole, string> = {
+  student: 'Студент',
+  editor: 'Редактор',
+};
+
 export interface ProfessionBrief {
   id: string;
   title: string;

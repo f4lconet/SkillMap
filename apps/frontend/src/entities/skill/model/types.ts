@@ -48,6 +48,57 @@ export interface UserSkill {
   selfScore: number | null;
 }
 
+/** app/schemas/skill.py::SkillBrief */
+export interface SkillBrief {
+  id: string;
+  slug: string;
+  title: string;
+  category: string;
+  difficulty: number;
+  layer: number;
+  estimatedHours: number | null;
+}
+
+/** app/schemas/skill.py::GapAnalysisItem */
+export interface GapAnalysisItem {
+  skill: SkillBrief;
+  status: SkillStatus;
+  isCore: boolean;
+  position: number;
+  locked: boolean;
+}
+
+/** app/schemas/skill.py::GapAnalysisResponse */
+export interface GapAnalysis {
+  professionId: string;
+  professionTitle: string;
+  totalSkills: number;
+  mastered: GapAnalysisItem[];
+  learning: GapAnalysisItem[];
+  missing: GapAnalysisItem[];
+  progressPercent: number;
+  estimatedRemainingHours: number | null;
+}
+
+/** app/schemas/skill.py::TrajectoryWeek */
+export interface TrajectoryWeek {
+  week: number;
+  title: string;
+  skills: SkillBrief[];
+  estimatedHours: number;
+  focus: string;
+}
+
+/** app/schemas/skill.py::TrajectoryResponse */
+export interface Trajectory {
+  professionId: string;
+  professionTitle: string;
+  level: string | null;
+  hoursPerWeek: number;
+  totalWeeks: number;
+  weeks: TrajectoryWeek[];
+}
+
 export const SKILL_STATUS_LABELS: Record<SkillStatus, string> = {
   not_started: 'Не начат',
   learning: 'В процессе',
