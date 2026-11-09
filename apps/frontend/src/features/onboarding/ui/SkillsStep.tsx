@@ -116,7 +116,7 @@ export function SkillsStep({ skills, selectedIds, onChange }: Props) {
           type="button"
           onClick={() => setShowAll(true)}
           className={cn(
-            'mt-5 text-helper font-medium text-accent hover:underline'
+            'mt-5 cursor-pointer text-helper font-medium text-accent hover:underline'
           )}
         >
           Показать ещё {hiddenCount} навыков ↓
@@ -126,7 +126,7 @@ export function SkillsStep({ skills, selectedIds, onChange }: Props) {
         <button
           type="button"
           onClick={() => setShowAll(false)}
-          className="mt-5 text-helper font-medium text-accent hover:underline"
+          className="mt-5 cursor-pointer text-helper font-medium text-accent hover:underline"
         >
           Свернуть ↑
         </button>

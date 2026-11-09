@@ -42,10 +42,10 @@ export function LevelStep({ value, onChange }: Props) {
               type="button"
               onClick={() => onChange(opt.value)}
               className={cn(
-                'flex w-full flex-col rounded-xl border px-5 py-4 text-left transition-colors',
+                'flex w-full cursor-pointer flex-col rounded-xl border px-5 py-4 text-left transition-colors',
                 active
-                  ? 'border-accent bg-accent-soft/50'
-                  : 'border-border hover:border-[#D0D5E0]'
+                  ? 'border-accent bg-accent-soft/50 hover:bg-accent-soft'
+                  : 'border-border hover:border-[#D0D5E0] hover:bg-page/60'
               )}
             >
               <span className="text-section text-text">{opt.title}</span>

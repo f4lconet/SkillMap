@@ -1,4 +1,4 @@
-import { Header } from './sections/Header';
+import { SiteHeader } from '@/widgets/site-header';
 import { Hero } from './sections/Hero';
 import { StatsBar } from './sections/StatsBar';
 import { HowItWorks } from './sections/HowItWorks';
@@ -14,7 +14,7 @@ import { Footer } from './sections/Footer';
 export function LandingPage() {
   return (
     <div className="min-h-screen bg-page text-text">
-      <Header />
+      <SiteHeader />
       <main>
         <Hero />
         <StatsBar />

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   professionApi,
@@ -10,6 +9,7 @@ import {
   type ProfessionLevel,
 } from '@/entities/profession';
 import { Button } from '@/shared/ui';
+import { SiteHeader } from '@/widgets/site-header';
 import { CatalogProfessionCard } from '@/features/catalog/ui/CatalogProfessionCard';
 import { cn } from '@/shared/lib/cn';
 import { authApi } from '@/features/auth';
@@ -116,41 +116,7 @@ export function CatalogPage() {
 
   return (
     <div className="min-h-screen bg-page">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border/60 bg-surface/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white">
-              S
-            </span>
-            <span className="text-lg font-semibold text-text">SkillMap</span>
-          </Link>
-          <nav className="hidden items-center gap-8 text-sm font-medium text-secondary md:flex">
-            <Link href="/#how" className="hover:text-text">
-              Как это работает
-            </Link>
-            <Link href="/catalog" className="text-accent">
-              Каталог профессий
-            </Link>
-            <Link href="/demo" className="hover:text-text">
-              Демо-карта
-            </Link>
-          </nav>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/auth"
-              className="hidden text-sm font-medium text-secondary hover:text-text sm:block"
-            >
-              Войти
-            </Link>
-            <Link href="/auth">
-              <Button variant="primary" size="sm" className="h-9 px-4">
-                Начать бесплатно
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
         <h1 className="text-h2 tracking-tight text-text sm:text-[36px]">
@@ -190,7 +156,7 @@ export function CatalogPage() {
             <select
               value={direction}
               onChange={(e) => setDirection(e.target.value)}
-              className="h-12 w-full appearance-none rounded-md border border-border bg-surface px-4 text-body text-text outline-none focus:border-accent focus:ring-[3px] focus:ring-[rgba(83,87,217,0.33)]"
+              className="h-12 w-full cursor-pointer appearance-none rounded-md border border-border bg-surface px-4 text-body text-text outline-none focus:border-accent focus:ring-[3px] focus:ring-[rgba(83,87,217,0.33)]"
             >
               <option value="all">Все направления</option>
               {directions.map((name) => (
@@ -206,7 +172,7 @@ export function CatalogPage() {
             <select
               value={level}
               onChange={(e) => setLevel(e.target.value as ProfessionLevel | 'all')}
-              className="h-12 w-full appearance-none rounded-md border border-border bg-surface px-4 text-body text-text outline-none focus:border-accent focus:ring-[3px] focus:ring-[rgba(83,87,217,0.33)]"
+              className="h-12 w-full cursor-pointer appearance-none rounded-md border border-border bg-surface px-4 text-body text-text outline-none focus:border-accent focus:ring-[3px] focus:ring-[rgba(83,87,217,0.33)]"
             >
               <option value="all">Любой</option>
               {(Object.keys(LEVEL_LABELS) as ProfessionLevel[]).map((key) => (
@@ -234,10 +200,10 @@ export function CatalogPage() {
                   type="button"
                   onClick={() => setDirection(chip.key)}
                   className={cn(
-                    'rounded-full px-3 py-1.5 text-helper font-medium transition-colors',
+                    'cursor-pointer rounded-full px-3 py-1.5 text-helper font-medium transition-colors',
                     active
-                      ? 'bg-accent-soft text-accent'
-                      : 'bg-surface text-secondary hover:bg-page'
+                      ? 'bg-accent-soft text-accent hover:bg-[#E3E1FB]'
+                      : 'bg-surface text-secondary hover:bg-page hover:text-text'
                   )}
                 >
                   {chip.label} · {count}

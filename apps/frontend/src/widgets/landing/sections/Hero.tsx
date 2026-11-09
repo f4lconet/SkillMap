@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Button, Badge, SkillNode } from '@/shared/ui';
+import { StartLearningLink } from '@/features/auth';
 
 export function Hero() {
   return (
@@ -26,12 +27,16 @@ export function Hero() {
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Button variant="primary" className="h-11 px-5">
-              → Построить мой маршрут
-            </Button>
-            <Button variant="secondary" className="h-11 px-5">
-              Посмотреть демо
-            </Button>
+            <StartLearningLink>
+              <Button variant="primary" className="h-11 px-5">
+                → Построить мой маршрут
+              </Button>
+            </StartLearningLink>
+            <Link href="/catalog">
+              <Button variant="secondary" className="h-11 px-5">
+                Посмотреть каталог
+              </Button>
+            </Link>
           </div>
         </div>
 

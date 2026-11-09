@@ -1,5 +1,3 @@
-import { Button } from '@/shared/ui';
-
 export function PlanSection() {
   return (
     <section className="px-4 py-16 sm:px-6 sm:py-20">
@@ -30,7 +28,10 @@ export function PlanSection() {
                   </p>
                 </div>
               </div>
-              <button className="text-helper font-medium text-accent hover:underline">
+              <button
+                type="button"
+                className="cursor-pointer text-helper font-medium text-accent hover:underline"
+              >
                 Открыть ↗
               </button>
             </div>
@@ -49,7 +50,10 @@ export function PlanSection() {
                   </p>
                 </div>
               </div>
-              <button className="text-helper font-medium text-accent hover:underline">
+              <button
+                type="button"
+                className="cursor-pointer text-helper font-medium text-accent hover:underline"
+              >
                 Открыть ↗
               </button>
             </div>

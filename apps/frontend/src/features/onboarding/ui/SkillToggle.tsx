@@ -14,10 +14,10 @@ export function SkillToggle({ title, checked, onChange }: Props) {
       type="button"
       onClick={() => onChange(!checked)}
       className={cn(
-        'flex w-full items-center gap-2.5 rounded-xl border px-3.5 py-3 text-left text-body transition-colors',
+        'flex w-full cursor-pointer items-center gap-2.5 rounded-xl border px-3.5 py-3 text-left text-body transition-colors',
         checked
-          ? 'border-[#B8E0C8] bg-[#E7F5EE] text-text'
-          : 'border-border bg-surface text-text hover:border-[#D0D5E0]'
+          ? 'border-[#B8E0C8] bg-[#E7F5EE] text-text hover:bg-[#DDF1E6]'
+          : 'border-border bg-surface text-text hover:border-[#D0D5E0] hover:bg-page/60'
       )}
     >
       <span

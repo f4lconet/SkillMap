@@ -28,7 +28,7 @@ export function FAQ() {
           До старта осталось совсем немного
         </h2>
 
-        <div className="mt-10 divide-y divide-border rounded-2xl border border-border bg-surface">
+        <div className="mt-10 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
           {items.map((item, i) => {
             const isOpen = open === i;
             return (
@@ -36,7 +36,7 @@ export function FAQ() {
                 <button
                   type="button"
                   onClick={() => setOpen(isOpen ? null : i)}
-                  className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
+                  className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left transition-colors hover:bg-page/60"
                 >
                   <span className="text-body font-medium text-text">
                     {item.q}

@@ -49,6 +49,17 @@
     outline: 3px solid var(--color-focus-ring);
     outline-offset: 0;
   }
+
+  /* Tailwind v4 preflight отдаёт кнопкам cursor: default — возвращаем pointer. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
 }
 
 @layer utilities {

@@ -35,7 +35,7 @@ export function SkillDetailPanel({ data, saving, onClose, onSetStatus }: Props) 
         <button
           type="button"
           onClick={onClose}
-          className="rounded-md p-1 text-secondary hover:bg-page hover:text-text"
+          className="cursor-pointer rounded-md p-1 text-secondary transition-colors hover:bg-page hover:text-text"
           aria-label="Закрыть"
         >
           ✕

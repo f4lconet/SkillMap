@@ -212,10 +212,10 @@ export function SkillMapPage() {
               type="button"
               onClick={() => setFilter(chip.key)}
               className={cn(
-                'rounded-full px-3 py-1.5 text-helper font-medium transition-colors',
+                'cursor-pointer rounded-full px-3 py-1.5 text-helper font-medium transition-colors',
                 filter === chip.key
-                  ? 'bg-accent-soft text-accent'
-                  : 'bg-surface text-secondary hover:bg-page'
+                  ? 'bg-accent-soft text-accent hover:bg-[#E3E1FB]'
+                  : 'bg-surface text-secondary hover:bg-page hover:text-text'
               )}
             >
               {chip.label} · {counts[chip.key]}

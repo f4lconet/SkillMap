@@ -24,10 +24,10 @@ export function HoursStep({ value, onChange }: Props) {
             type="button"
             onClick={() => onChange(h)}
             className={cn(
-              'min-w-[88px] rounded-xl border px-4 py-3 text-section transition-colors',
+              'min-w-[88px] cursor-pointer rounded-xl border px-4 py-3 text-section transition-colors',
               value === h
-                ? 'border-accent bg-accent text-white'
-                : 'border-border bg-surface text-text hover:border-accent/40'
+                ? 'border-accent bg-accent text-white hover:bg-[#4448C4]'
+                : 'border-border bg-surface text-text hover:border-accent/40 hover:bg-page/60'
             )}
           >
             {h} ч

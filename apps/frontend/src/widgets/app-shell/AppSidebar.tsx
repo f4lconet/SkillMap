@@ -17,6 +17,13 @@ const NAV = [
 function NavIcon({ name }: { name: string }) {
   const common = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.75 } as const;
   switch (name) {
+    case 'home':
+      return (
+        <svg {...common}>
+          <path d="M3 10.5L12 3l9 7.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M5.5 9.5V20a1 1 0 001 1h11a1 1 0 001-1V9.5" />
+        </svg>
+      );
     case 'map':
       return (
         <svg {...common}>
@@ -89,12 +96,16 @@ export function AppSidebar({
 
   return (
     <aside className="flex h-full w-[240px] shrink-0 flex-col border-r border-border bg-surface">
-      <div className="flex h-14 items-center gap-2 px-5">
+      <Link
+        href="/"
+        title="На главную"
+        className="flex h-14 items-center gap-2 px-5 transition-opacity hover:opacity-80"
+      >
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white">
           S
         </span>
         <span className="text-base font-semibold text-text">SkillMap</span>
-      </div>
+      </Link>
 
       <div className="px-4 pt-2">
         <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-secondary">
@@ -104,6 +115,16 @@ export function AppSidebar({
       </div>
 
       <nav className="mt-3 flex-1 space-y-0.5 px-3">
+        <Link
+          href="/"
+          className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium text-secondary transition-colors hover:bg-page hover:text-text"
+        >
+          <NavIcon name="home" />
+          На главную
+        </Link>
+
+        <div className="my-2 border-t border-border" />
+
         {NAV.map((item) => {
           const active = pathname === item.href || pathname.startsWith(item.href + '/');
 
@@ -163,7 +184,11 @@ export function AppSidebar({
 
       {/* User */}
       <div className="border-t border-border px-4 py-3">
-        <div className="flex items-center gap-2.5">
+        <Link
+          href="/profile"
+          title="Перейти в профиль"
+          className="-mx-1 flex items-center gap-2.5 rounded-lg px-1 py-1 transition-colors hover:bg-page"
+        >
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-soft text-helper font-semibold text-accent">
             {initials || '·'}
           </span>
@@ -173,7 +198,7 @@ export function AppSidebar({
             </p>
             {subtitle && <p className="text-helper text-secondary">{subtitle}</p>}
           </div>
-        </div>
+        </Link>
         <button
           type="button"
           disabled

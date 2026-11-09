@@ -112,7 +112,7 @@ export function LoginForm() {
             type="button"
             onClick={onForgot}
             disabled={forgotLoading}
-            className="text-helper font-medium text-accent hover:underline disabled:opacity-60"
+            className="cursor-pointer text-helper font-medium text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-60"
           >
             {forgotLoading ? 'Отправка…' : 'Забыли пароль?'}
           </button>
@@ -142,7 +142,7 @@ export function LoginForm() {
             type="button"
             onClick={onForgot}
             disabled={forgotLoading}
-            className="mt-2 text-helper font-medium text-accent hover:underline disabled:opacity-60"
+            className="mt-2 cursor-pointer text-helper font-medium text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-60"
           >
             Отправить ссылку на email →
           </button>

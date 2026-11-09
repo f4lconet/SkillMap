@@ -1,4 +1,5 @@
 import { Button } from '@/shared/ui';
+import { StartLearningLink } from '@/features/auth';
 
 export function FinalCTA() {
   return (
@@ -13,12 +14,14 @@ export function FinalCTA() {
           Выберите цель. Отметьте навыки. Получите свой маршрут.
         </p>
         <div className="mt-8">
-          <Button
-            variant="secondary"
-            className="h-12 border-0 bg-white px-6 text-accent hover:bg-white/90"
-          >
-            Начать за 3 минуты →
-          </Button>
+          <StartLearningLink>
+            <Button
+              variant="secondary"
+              className="h-12 border-0 bg-white px-6 text-accent hover:bg-white/90"
+            >
+              Начать за 3 минуты →
+            </Button>
+          </StartLearningLink>
         </div>
       </div>
     </section>

@@ -20,11 +20,11 @@ export interface SkillNodeProps {
 }
 
 const statusStyles: Record<SkillNodeStatus, string> = {
-  mastered: 'bg-success-soft border-success text-success',
-  'in-progress': 'bg-accent-soft border-accent text-accent border-dashed',
-  available: 'bg-surface border-border text-text hover:border-accent/50',
+  mastered: 'bg-success-soft border-success text-success hover:bg-[#DDF1E6]',
+  'in-progress': 'bg-accent-soft border-accent text-accent border-dashed hover:bg-[#E3E1FB]',
+  available: 'bg-surface border-border text-text hover:border-accent/50 hover:bg-page/60',
   locked: 'bg-page border-border text-secondary opacity-70',
-  selected: 'bg-accent border-accent text-white shadow-soft',
+  selected: 'bg-accent border-accent text-white shadow-soft hover:bg-[#494DC8]',
 };
 
 const statusIcon: Record<SkillNodeStatus, ReactNode> = {

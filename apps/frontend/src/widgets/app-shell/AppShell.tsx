@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { AppSidebar } from './AppSidebar';
 
 type Props = {
@@ -39,6 +40,17 @@ export function AppShell({
         {/* Top bar */}
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 bg-surface px-4 sm:px-6">
           <nav className="flex items-center gap-2 text-sm text-secondary">
+            <Link
+              href="/"
+              title="На главную"
+              aria-label="На главную"
+              className="-ml-1 flex h-8 w-8 items-center justify-center rounded-lg text-secondary transition-colors hover:bg-page hover:text-text md:hidden"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 10.5 12 3l9 7.5" />
+                <path d="M5.5 9.5V21h13V9.5" />
+              </svg>
+            </Link>
             {breadcrumb.map((item, i) => (
               <span key={i} className="flex items-center gap-2">
                 {i > 0 && <span className="text-border">›</span>}
@@ -52,7 +64,7 @@ export function AppShell({
             <span className="hidden sm:inline">{savedHint}</span>
             <button
               type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-page"
+              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-secondary transition-colors hover:bg-page hover:text-text"
               aria-label="Уведомления"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">

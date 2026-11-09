@@ -64,7 +64,7 @@ function HistoryButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={`${label} (${shortcut})`}
-      className="group relative flex h-7 w-7 items-center justify-center rounded-lg text-secondary transition-colors hover:bg-page hover:text-text disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-secondary"
+      className="group relative flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-secondary transition-colors hover:bg-page hover:text-text disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-secondary"
     >
       <svg
         width="15"

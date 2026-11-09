@@ -27,10 +27,10 @@ export function NavItem({
       href={href}
       onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-2 h-[46px] px-4 rounded-md text-body font-medium transition-colors',
+        'inline-flex cursor-pointer items-center gap-2 h-[46px] px-4 rounded-md text-body font-medium transition-colors',
         'outline-none focus-visible:ring-[3px] focus-visible:ring-[rgba(83,87,217,0.33)]',
         active
-          ? 'bg-accent-soft text-accent'
+          ? 'bg-accent-soft text-accent hover:bg-[#E3E1FB]'
           : 'text-secondary hover:bg-page hover:text-text',
         className
       )}
