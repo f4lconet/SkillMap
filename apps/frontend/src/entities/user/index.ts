@@ -6,4 +6,5 @@ export type {
   RegisterPayload,
   LoginPayload,
   ForgotPasswordPayload,
+  UserUpdatePayload,
 } from './model/types';

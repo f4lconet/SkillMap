@@ -10,6 +10,7 @@ export interface Profession {
   skillsCount: number;
   estimatedWeeks: number;
   isPriority: boolean;
+  skillsReady: boolean;
 }
 
 export interface ProfessionDetail extends Profession {

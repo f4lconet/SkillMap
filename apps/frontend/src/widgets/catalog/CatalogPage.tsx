@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   professionApi,
   LEVEL_LABELS,
@@ -14,6 +15,7 @@ import { cn } from '@/shared/lib/cn';
 import { authApi } from '@/features/auth';
 
 export function CatalogPage() {
+  const router = useRouter();
   const [list, setList] = useState<Profession[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -83,10 +85,20 @@ export function CatalogPage() {
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
-    if (authApi.getAccessToken()) {
-      authApi.setTargetProfession(id).catch(() => {
-        /* цель сохранится локально, повторим при следующем выборе */
-      });
+
+    if (!authApi.getAccessToken()) {
+      router.push('/auth');
+      return;
+    }
+
+    const user = authApi.getCurrentUser();
+    authApi.setTargetProfession(id).catch(() => {
+      /* цель сохранится локально, повторим при следующем выборе */
+    });
+
+    // Онбординг проходят один раз — дальше цель просто меняется.
+    if (!user?.onboardingCompleted) {
+      router.push(`/onboarding?profession=${id}`);
     }
   };
 
