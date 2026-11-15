@@ -11,6 +11,7 @@ from app.models.profession import Profession
 from app.models.skill import ProfessionSkill, Skill, SkillDependency, UserSkill
 from app.models.tokens import EmailVerificationToken, PasswordResetToken, RefreshToken
 from app.models.user import User
+from app.models.resource import Plan, PlanItem, Resource
 
 __all__ = [
     "Base",
@@ -29,4 +30,7 @@ __all__ = [
     "User",
     "UserRole",
     "UserSkill",
+    "Resource",
+    "Plan",
+    "PlanItem"
 ]

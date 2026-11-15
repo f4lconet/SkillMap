@@ -29,6 +29,18 @@ class PrerequisiteRef(BaseModel):
     dep_type: DependencyType
 
 
+class ResourceBrief(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    url: str = ""
+    resource_type: str = "course"
+    is_free: bool = True
+    provider: str = ""
+    estimated_hours: int | None = None
+
+
 class ProfessionSkillNode(BaseModel):
     """Узел карты для профессии."""
 
@@ -49,6 +61,7 @@ class ProfessionSkillNode(BaseModel):
     user_status: SkillStatus | None = None
     self_score: int | None = None
     locked: bool = False
+    resources: list[ResourceBrief] = Field(default_factory=list)
 
 
 class ProfessionMapResponse(BaseModel):
@@ -75,12 +88,23 @@ class UserSkillRead(BaseModel):
     self_score: int | None = None
 
 
+class UserSkillBulkItem(BaseModel):
+    skill_id: uuid.UUID
+    status: SkillStatus = SkillStatus.MASTERED
+    self_score: int | None = Field(default=None, ge=1, le=5)
+
+
+class UserSkillBulkRequest(BaseModel):
+    skills: list[UserSkillBulkItem] = Field(min_length=1, max_length=100)
+
+
 class GapAnalysisItem(BaseModel):
     skill: SkillBrief
     status: SkillStatus
     is_core: bool
     position: int
     locked: bool = False
+    priority: int | None = None
 
 
 class GapAnalysisResponse(BaseModel):
@@ -92,13 +116,23 @@ class GapAnalysisResponse(BaseModel):
     missing: list[GapAnalysisItem]
     progress_percent: float
     estimated_remaining_hours: int | None = None
+    match_percent: float | None = None  # alias for progress_percent (API contracts)
+
+
+class TrajectoryWeekItem(BaseModel):
+    skill: SkillBrief
+    hours: int
+    resources: list[ResourceBrief] = Field(default_factory=list)
+    status: str = "planned"
 
 
 class TrajectoryWeek(BaseModel):
     week: int
     title: str
-    skills: list[SkillBrief]
-    estimated_hours: int
+    items: list[TrajectoryWeekItem] = Field(default_factory=list)
+    # backward-compat
+    skills: list[SkillBrief] = Field(default_factory=list)
+    estimated_hours: int = 0
     focus: str = ""
 
 
@@ -108,4 +142,30 @@ class TrajectoryResponse(BaseModel):
     level: str | None = None
     hours_per_week: int
     total_weeks: int
+    current_week: int = 1
     weeks: list[TrajectoryWeek]
+    what_to_do_this_week: list[TrajectoryWeekItem] = Field(default_factory=list)
+
+
+class DashboardKpi(BaseModel):
+    mastered_count: int = 0
+    learning_count: int = 0
+    total_skills: int = 0
+    progress_percent: float = 0.0
+    estimated_remaining_hours: int | None = None
+    hours_per_week: int | None = None
+    level: str | None = None
+    target_profession_title: str | None = None
+
+
+class DashboardNextStep(BaseModel):
+    skill: SkillBrief
+    reason: str = ""
+    resources: list[ResourceBrief] = Field(default_factory=list)
+
+
+class DashboardResponse(BaseModel):
+    kpi: DashboardKpi
+    next_steps: list[DashboardNextStep] = Field(default_factory=list)
+    status_breakdown: dict[str, int] = Field(default_factory=dict)
+    current_week_focus: str | None = None

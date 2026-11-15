@@ -25,6 +25,9 @@ from app.models import (  # noqa: E402
     SkillDependency,
     User,
     UserRole,
+    Plan,
+    PlanItem,
+    Resource,
 )
 
 PASSWORD = "Strong123"

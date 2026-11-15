@@ -41,6 +41,12 @@ class Skill(Base, IdMixin, TimestampMixin):
         cascade="all, delete-orphan",
     )
 
+    resources: Mapped[list["Resource"]] = relationship(  # noqa: F821
+        back_populates="skill",
+        cascade="all, delete-orphan",
+        order_by="Resource.position",
+    )
+
 
 class SkillDependency(Base, IdMixin, TimestampMixin):
     """Ребро графа: prerequisite → skill (required | recommended)."""
