@@ -198,6 +198,9 @@ export function SkillMapPage() {
           </p>
           <p className="text-helper text-secondary">Ваш комфортный темп</p>
         </div>
+        <Link href="/gap">
+          <Button variant="secondary">Gap Analysis</Button>
+        </Link>
         <Link href="/trajectory">
           <Button variant="primary">→ Открыть план</Button>
         </Link>

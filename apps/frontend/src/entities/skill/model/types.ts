@@ -69,6 +69,8 @@ export interface GapAnalysisItem {
   isCore: boolean;
   position: number;
   locked: boolean;
+  /** Топологический ранг: 1 — учить первым. */
+  priority: number | null;
 }
 
 /** app/schemas/skill.py::GapAnalysisResponse */
@@ -80,6 +82,8 @@ export interface GapAnalysis {
   learning: GapAnalysisItem[];
   missing: GapAnalysisItem[];
   progressPercent: number;
+  /** Синоним progressPercent из API-контракта. */
+  matchPercent: number | null;
   estimatedRemainingHours: number | null;
 }
 

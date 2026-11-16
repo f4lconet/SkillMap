@@ -65,7 +65,7 @@ export function TrajectoryPage() {
   if (loading) {
     return (
       <AppShell {...shellProps}>
-        <div className="mx-auto max-w-5xl px-4 py-16 text-center text-body text-secondary sm:px-6">
+        <div className="mx-auto max-w-[1200px] px-4 py-16 text-center text-body text-secondary sm:px-6">
           Строим траекторию обучения…
         </div>
       </AppShell>
@@ -75,7 +75,7 @@ export function TrajectoryPage() {
   if (error) {
     return (
       <AppShell {...shellProps}>
-        <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6">
+        <div className="mx-auto max-w-[1200px] px-4 py-16 sm:px-6">
           <div className="rounded-2xl border border-danger/30 bg-danger-soft px-5 py-4 text-body text-danger">
             {error}
           </div>
@@ -90,7 +90,7 @@ export function TrajectoryPage() {
   if (!user?.targetProfession) {
     return (
       <AppShell {...shellProps}>
-        <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6">
+        <div className="mx-auto max-w-[1200px] px-4 py-16 sm:px-6">
           <h1 className="text-h2 tracking-tight text-text">Траектория пока пуста</h1>
           <p className="mt-2 max-w-xl text-body leading-relaxed text-secondary">
             Выберите профессию и отметьте уже известные навыки — после этого
@@ -108,7 +108,7 @@ export function TrajectoryPage() {
 
   return (
     <AppShell {...shellProps}>
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+      <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">
@@ -124,11 +124,18 @@ export function TrajectoryPage() {
                 : 'Посильный план с учётом зависимостей между навыками.'}
             </p>
           </div>
-          <Link href="/profile">
-            <Button variant="secondary" size="sm">
-              ⚙ Настроить нагрузку
-            </Button>
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/gap">
+              <Button variant="secondary" size="sm">
+                Gap Analysis
+              </Button>
+            </Link>
+            <Link href="/profile">
+              <Button variant="secondary" size="sm">
+                ⚙ Настроить нагрузку
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {markError && (
