@@ -91,4 +91,9 @@ export const authApi = {
   getAccessToken(): string | null {
     return authStorage.getAccessToken();
   },
+
+  /** Сброс локальной сессии без запроса к бэкенду (токен уже недействителен). */
+  clearSession(): void {
+    authStorage.clear();
+  },
 };
