@@ -9,7 +9,7 @@ const NAV = [
   { href: '/map', label: 'Карта', icon: 'map', ready: true },
   { href: '/trajectory', label: 'Траектория', icon: 'path', ready: true },
   { href: '/gap', label: 'Gap Analysis', icon: 'gap', ready: true },
-  { href: '/dashboard', label: 'Дашборд', icon: 'chart', ready: false },
+  { href: '/dashboard', label: 'Дашборд', icon: 'chart', ready: true },
   { href: '/integrations', label: 'Интеграции', icon: 'plug', ready: false },
   { href: '/profile', label: 'Профиль', icon: 'user', ready: true },
 ] as const;

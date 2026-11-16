@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict, deque
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -26,9 +26,13 @@ from app.models import (
     UserSkill,
 )
 from app.schemas.skill import (
+    DashboardAchievement,
+    DashboardDayHours,
     DashboardKpi,
     DashboardNextStep,
+    DashboardProgressPoint,
     DashboardResponse,
+    DashboardWeekActivity,
     GapAnalysisItem,
     GapAnalysisResponse,
     PlanItemUpdate,
@@ -903,6 +907,210 @@ async def recalculate_plan(db: AsyncSession, user: User) -> TrajectoryResponse:
     return await _plan_response(db, user, plan)
 
 
+_MONTHS_GENITIVE = (
+    "января",
+    "февраля",
+    "марта",
+    "апреля",
+    "мая",
+    "июня",
+    "июля",
+    "августа",
+    "сентября",
+    "октября",
+    "ноября",
+    "декабря",
+)
+_MONTHS_SHORT = (
+    "янв.",
+    "февр.",
+    "мар.",
+    "апр.",
+    "мая",
+    "июн.",
+    "июл.",
+    "авг.",
+    "сент.",
+    "окт.",
+    "нояб.",
+    "дек.",
+)
+_WEEKDAYS_SHORT = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+
+PROGRESS_HISTORY_WEEKS = 4
+ACHIEVEMENTS_LIMIT = 4
+
+
+def _as_aware(value: datetime) -> datetime:
+    """SQLite отдаёт naive datetime — приводим к UTC."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def _format_day(value: datetime) -> str:
+    return f"{value.day} {_MONTHS_GENITIVE[value.month - 1]}"
+
+
+def _format_day_short(value: datetime) -> str:
+    return f"{value.day} {_MONTHS_SHORT[value.month - 1]}"
+
+
+def _format_hours(value: float) -> str:
+    return f"{value:g}".replace(".", ",")
+
+
+async def _progress_history(
+    db: AsyncSession,
+    user: User,
+    profession_id: uuid.UUID,
+    total_skills: int,
+) -> list[DashboardProgressPoint]:
+    """Накопленный процент освоенных навыков на конец каждой из последних недель."""
+    if total_skills <= 0:
+        return []
+
+    stamps = (
+        (
+            await db.execute(
+                select(UserSkill.updated_at)
+                .join(
+                    ProfessionSkill,
+                    ProfessionSkill.skill_id == UserSkill.skill_id,
+                )
+                .where(
+                    UserSkill.user_id == user.id,
+                    ProfessionSkill.profession_id == profession_id,
+                    UserSkill.status.in_(tuple(DONE)),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    mastered_at = sorted(_as_aware(ts) for ts in stamps if ts is not None)
+
+    now = datetime.now(UTC)
+    this_monday = now - timedelta(days=now.weekday())
+    history: list[DashboardProgressPoint] = []
+    for shift in range(PROGRESS_HISTORY_WEEKS - 1, -1, -1):
+        week_start = this_monday - timedelta(weeks=shift)
+        week_end = week_start + timedelta(days=7)
+        mastered = sum(1 for ts in mastered_at if ts < week_end)
+        history.append(
+            DashboardProgressPoint(
+                label=_format_day_short(week_start),
+                value=round(mastered * 100 / total_skills, 1),
+                mastered=mastered,
+            )
+        )
+    return history
+
+
+def _week_activity(
+    plan: Plan | None,
+    hours_per_week: int | None,
+) -> DashboardWeekActivity:
+    """Фактически закрытые часы плана по дням текущей недели."""
+    now = datetime.now(UTC)
+    monday = now - timedelta(days=now.weekday())
+    week_end = monday + timedelta(days=7)
+
+    goal = hours_per_week or (plan.hours_per_week if plan is not None else 6)
+    per_day: dict[int, float] = defaultdict(float)
+    for item in plan.items if plan is not None else []:
+        if _as_plan_status(item.status) != PlanItemStatus.DONE:
+            continue
+        finished = _as_aware(item.updated_at) if item.updated_at else None
+        if finished is None or not monday <= finished < week_end:
+            continue
+        per_day[finished.weekday()] += item.estimated_hours
+
+    sunday = week_end - timedelta(days=1)
+    return DashboardWeekActivity(
+        label=f"{monday.day}–{_format_day(sunday)}",
+        days=[
+            DashboardDayHours(
+                day=_WEEKDAYS_SHORT[index],
+                hours=round(per_day.get(index, 0.0), 1),
+                current=index == now.weekday(),
+            )
+            for index in range(7)
+        ],
+        hours_done=round(sum(per_day.values()), 1),
+        hours_goal=goal,
+    )
+
+
+async def _recent_achievements(
+    db: AsyncSession,
+    user: User,
+    profession_id: uuid.UUID,
+    plan: Plan | None,
+    activity: DashboardWeekActivity,
+) -> list[DashboardAchievement]:
+    """События прогресса: закрытые часы недели, освоенные навыки, сборка плана."""
+    dated: list[tuple[datetime, DashboardAchievement]] = []
+    now = datetime.now(UTC)
+
+    if activity.hours_done > 0:
+        dated.append(
+            (
+                now,
+                DashboardAchievement(
+                    kind="time",
+                    date="Эта неделя",
+                    text=(
+                        f"{_format_hours(activity.hours_done)} из "
+                        f"{activity.hours_goal} ч плана недели"
+                    ),
+                ),
+            )
+        )
+
+    mastered_rows = (
+        await db.execute(
+            select(Skill.title, UserSkill.updated_at)
+            .join(ProfessionSkill, ProfessionSkill.skill_id == UserSkill.skill_id)
+            .join(Skill, Skill.id == UserSkill.skill_id)
+            .where(
+                UserSkill.user_id == user.id,
+                ProfessionSkill.profession_id == profession_id,
+                UserSkill.status.in_(tuple(DONE)),
+                UserSkill.updated_at.is_not(None),
+            )
+            .order_by(UserSkill.updated_at.desc())
+            .limit(ACHIEVEMENTS_LIMIT)
+        )
+    ).all()
+    for title, updated_at in mastered_rows:
+        finished = _as_aware(updated_at)
+        dated.append(
+            (
+                finished,
+                DashboardAchievement(
+                    kind="check",
+                    date=_format_day(finished),
+                    text=f"Освоен навык «{title}»",
+                ),
+            )
+        )
+
+    if plan is not None:
+        generated = _as_aware(plan.generated_at)
+        dated.append(
+            (
+                generated,
+                DashboardAchievement(
+                    kind="flag",
+                    date=_format_day(generated),
+                    text="Собран персональный план обучения",
+                ),
+            )
+        )
+
+    dated.sort(key=lambda pair: pair[0], reverse=True)
+    return [item for _, item in dated[:ACHIEVEMENTS_LIMIT]]
+
+
 async def dashboard(db: AsyncSession, user: User) -> DashboardResponse:
     if user.target_profession_id is None:
         return DashboardResponse(
@@ -912,10 +1120,14 @@ async def dashboard(db: AsyncSession, user: User) -> DashboardResponse:
             ),
             next_steps=[],
             status_breakdown={},
+            progress_history=[],
+            recent_achievements=[],
+            week_activity=None,
         )
 
     gap = await gap_analysis(db, user, user.target_profession_id)
     traj = await build_trajectory(db, user, user.target_profession_id, persist=False)
+    plan = await _load_plan(db, user.id, user.target_profession_id)
 
     breakdown = {
         "mastered": len(gap.mastered),
@@ -946,6 +1158,7 @@ async def dashboard(db: AsyncSession, user: User) -> DashboardResponse:
                 break
 
     focus = traj.weeks[0].focus if traj.weeks else None
+    activity = _week_activity(plan, user.hours_per_week)
 
     return DashboardResponse(
         kpi=DashboardKpi(
@@ -961,4 +1174,11 @@ async def dashboard(db: AsyncSession, user: User) -> DashboardResponse:
         next_steps=next_steps,
         status_breakdown=breakdown,
         current_week_focus=focus,
+        progress_history=await _progress_history(
+            db, user, user.target_profession_id, gap.total_skills
+        ),
+        recent_achievements=await _recent_achievements(
+            db, user, user.target_profession_id, plan, activity
+        ),
+        week_activity=activity,
     )

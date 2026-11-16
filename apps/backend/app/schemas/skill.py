@@ -184,8 +184,38 @@ class DashboardNextStep(BaseModel):
     resources: list[ResourceBrief] = Field(default_factory=list)
 
 
+class DashboardProgressPoint(BaseModel):
+    """История прогресса: доля освоенных навыков на конец недели."""
+
+    label: str
+    value: float
+    mastered: int
+
+
+class DashboardAchievement(BaseModel):
+    kind: Literal["check", "time", "flag"]
+    date: str
+    text: str
+
+
+class DashboardDayHours(BaseModel):
+    day: str
+    hours: float = 0.0
+    current: bool = False
+
+
+class DashboardWeekActivity(BaseModel):
+    label: str
+    days: list[DashboardDayHours] = Field(default_factory=list)
+    hours_done: float = 0.0
+    hours_goal: int = 0
+
+
 class DashboardResponse(BaseModel):
     kpi: DashboardKpi
     next_steps: list[DashboardNextStep] = Field(default_factory=list)
     status_breakdown: dict[str, int] = Field(default_factory=dict)
     current_week_focus: str | None = None
+    progress_history: list[DashboardProgressPoint] = Field(default_factory=list)
+    recent_achievements: list[DashboardAchievement] = Field(default_factory=list)
+    week_activity: DashboardWeekActivity | None = None
