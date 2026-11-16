@@ -3,6 +3,7 @@ from app.models.direction import Direction
 from app.models.enums import (
     DependencyType,
     Level,
+    PlanItemStatus,
     ProfessionStatus,
     SkillStatus,
     UserRole,
@@ -20,6 +21,7 @@ __all__ = [
     "EmailVerificationToken",
     "Level",
     "PasswordResetToken",
+    "PlanItemStatus",
     "Profession",
     "ProfessionSkill",
     "ProfessionStatus",

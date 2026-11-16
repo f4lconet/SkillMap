@@ -6,6 +6,8 @@ from app.api.deps import CurrentUser, DbSession, OptionalUser
 from app.schemas.skill import (
     DashboardResponse,
     GapAnalysisResponse,
+    PlanItemRead,
+    PlanItemUpdate,
     ProfessionMapResponse,
     TrajectoryResponse,
     UserSkillBulkRequest,
@@ -137,10 +139,39 @@ async def recalculate_plan(user: CurrentUser, db: DbSession):
     return await skills_service.recalculate_plan(db, user)
 
 
+@router.patch(
+    "/me/plan/items/{item_id}",
+    response_model=PlanItemRead,
+    summary="Отметить пункт плана (недели): planned | in_progress | done",
+)
+async def patch_plan_item(
+    item_id: uuid.UUID,
+    data: PlanItemUpdate,
+    user: CurrentUser,
+    db: DbSession,
+):
+    return await skills_service.set_plan_item_status(db, user, item_id, data)
+
+
+@router.post(
+    "/me/plan/weeks/{week_number}/complete",
+    response_model=TrajectoryResponse,
+    summary="Закрыть неделю целиком и перейти к следующей",
+)
+async def complete_plan_week(
+    week_number: int,
+    user: CurrentUser,
+    db: DbSession,
+):
+    return await skills_service.complete_plan_week(db, user, week_number)
+
+
 @router.get(
     "/me/trajectory/{profession_id}",
     response_model=TrajectoryResponse,
-    summary="Траектория по профессии (без сохранения, on-the-fly)",
+    summary="Траектория по профессии с прогрессом по пунктам (сохраняется)",
 )
 async def trajectory(profession_id: uuid.UUID, user: CurrentUser, db: DbSession):
-    return await skills_service.build_trajectory(db, user, profession_id, persist=False)
+    return await skills_service.get_or_build_plan(
+        db, user, profession_id=profession_id
+    )

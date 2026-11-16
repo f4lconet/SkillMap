@@ -532,12 +532,22 @@ export function ProfilePage() {
                   Выберите профессию, чтобы увидеть прогресс.
                 </p>
               )}
-              <Link
-                href="/catalog"
-                className="mt-4 inline-block text-helper font-medium text-accent hover:underline"
-              >
-                Открыть каталог профессий →
-              </Link>
+              <div className="mt-4 flex flex-col gap-1.5">
+                {totalSkills > 0 && (
+                  <Link
+                    href="/trajectory"
+                    className="text-helper font-medium text-accent hover:underline"
+                  >
+                    Открыть траекторию обучения →
+                  </Link>
+                )}
+                <Link
+                  href="/catalog"
+                  className="text-helper font-medium text-accent hover:underline"
+                >
+                  Открыть каталог профессий →
+                </Link>
+              </div>
             </div>
 
             <div className="rounded-2xl border border-border bg-surface p-5">

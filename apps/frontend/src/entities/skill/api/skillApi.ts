@@ -1,6 +1,8 @@
 import { api } from '@/shared/api';
 import type {
   GapAnalysis,
+  PlanItem,
+  PlanItemStatus,
   ProfessionMap,
   SkillStatus,
   Trajectory,
@@ -38,5 +40,13 @@ export const skillApi = {
   /** GET /me/trajectory/{profession_id} */
   getTrajectory(professionId: string): Promise<Trajectory> {
     return api.get<Trajectory>(`/me/trajectory/${professionId}`);
+  },
+
+  /** PATCH /me/plan/items/{item_id} */
+  setPlanItemStatus(
+    itemId: string,
+    status: PlanItemStatus
+  ): Promise<PlanItem> {
+    return api.patch<PlanItem>(`/me/plan/items/${itemId}`, { status });
   },
 };

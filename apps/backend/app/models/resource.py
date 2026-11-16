@@ -78,7 +78,7 @@ class PlanItem(Base, IdMixin, TimestampMixin):
     position: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(
         String(20), default="planned"
-    )
+    )  # planned | in_progress | done
 
     plan: Mapped[Plan] = relationship(back_populates="items")
     skill: Mapped["Skill"] = relationship(lazy="joined")  # noqa: F821

@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.enums import DependencyType, SkillStatus
+from app.models.enums import DependencyType, PlanItemStatus, SkillStatus
 
 
 class SkillBrief(BaseModel):
@@ -123,7 +123,25 @@ class TrajectoryWeekItem(BaseModel):
     skill: SkillBrief
     hours: int
     resources: list[ResourceBrief] = Field(default_factory=list)
-    status: str = "planned"
+    status: PlanItemStatus = PlanItemStatus.PLANNED
+    # id сохранённого пункта плана — нужен для PATCH /me/plan/items/{item_id}
+    item_id: uuid.UUID | None = None
+
+
+class PlanItemUpdate(BaseModel):
+    status: PlanItemStatus
+
+
+class PlanItemRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    plan_id: uuid.UUID
+    skill_id: uuid.UUID
+    week_number: int
+    estimated_hours: int
+    position: int
+    status: PlanItemStatus
 
 
 class TrajectoryWeek(BaseModel):

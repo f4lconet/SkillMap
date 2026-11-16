@@ -31,6 +31,12 @@ class DependencyType(StrEnum):
     RECOMMENDED = "recommended"
 
 
+class PlanItemStatus(StrEnum):
+    PLANNED = "planned"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+
+
 def _values(enum_cls) -> list[str]:
     return [m.value for m in enum_cls]
 

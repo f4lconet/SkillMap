@@ -14,6 +14,7 @@ from app.models import (
     DependencyType,
     Plan,
     PlanItem,
+    PlanItemStatus,
     Profession,
     ProfessionSkill,
     ProfessionStatus,
@@ -30,6 +31,7 @@ from app.schemas.skill import (
     DashboardResponse,
     GapAnalysisItem,
     GapAnalysisResponse,
+    PlanItemUpdate,
     PrerequisiteRef,
     ProfessionMapResponse,
     ProfessionSkillNode,
@@ -43,6 +45,13 @@ from app.schemas.skill import (
 )
 
 DONE = {SkillStatus.MASTERED.value, SkillStatus.SKIPPED.value}
+
+# Пункт плана → статус навыка: отметка на неделе синхронизируется с прогрессом.
+PLAN_TO_SKILL_STATUS = {
+    PlanItemStatus.DONE.value: SkillStatus.MASTERED,
+    PlanItemStatus.IN_PROGRESS.value: SkillStatus.LEARNING,
+    PlanItemStatus.PLANNED.value: SkillStatus.NOT_STARTED,
+}
 
 
 async def get_profession_or_404(db: AsyncSession, profession_id: uuid.UUID) -> Profession:
@@ -480,6 +489,7 @@ async def build_trajectory(
     profession_id: uuid.UUID | None = None,
     *,
     persist: bool = False,
+    keep_done_skill_ids: set[uuid.UUID] | None = None,
 ) -> TrajectoryResponse:
     pid = profession_id or _require_target(user)
     profession = await get_profession_or_404(db, pid)
@@ -504,7 +514,13 @@ async def build_trajectory(
         )
     )
     mastered_ids = {us.skill_id for us in us_rows if us.status in DONE}
-    remaining = [ps for ps in links if ps.skill_id not in mastered_ids]
+    # Уже закрытые пункты плана остаются в неделях, чтобы прогресс не пропадал.
+    keep = keep_done_skill_ids or set()
+    remaining = [
+        ps
+        for ps in links
+        if ps.skill_id not in mastered_ids or ps.skill_id in keep
+    ]
 
     weeks = await _build_week_items(remaining, deps_map, res_map, hours_per_week)
     what = weeks[0].items if weeks else []
@@ -531,111 +547,304 @@ async def _persist_plan(
     hours_per_week: int,
     weeks: list[TrajectoryWeek],
 ) -> Plan:
-    existing = await db.scalar(
-        select(Plan).where(
-            Plan.user_id == user.id, Plan.profession_id == profession.id
-        )
+    plan = await db.scalar(
+        select(Plan)
+        .where(Plan.user_id == user.id, Plan.profession_id == profession.id)
+        .options(selectinload(Plan.items))
     )
-    if existing:
-        old_items = list(
-            await db.scalars(select(PlanItem).where(PlanItem.plan_id == existing.id))
-        )
-        for it in old_items:
-            await db.delete(it)
-        plan = existing
-        plan.hours_per_week = hours_per_week
-        plan.total_weeks = len(weeks)
-        plan.current_week = 1
-        plan.generated_at = datetime.now(UTC)
-    else:
+    now = datetime.now(UTC)
+    if plan is None:
         plan = Plan(
             user_id=user.id,
             profession_id=profession.id,
             hours_per_week=hours_per_week,
             total_weeks=len(weeks),
             current_week=1,
-            generated_at=datetime.now(UTC),
+            generated_at=now,
         )
         db.add(plan)
         await db.flush()
+        existing: dict[uuid.UUID, PlanItem] = {}
+    else:
+        existing = {it.skill_id: it for it in plan.items}
+        plan.hours_per_week = hours_per_week
+        plan.generated_at = now
 
+    plan.total_weeks = len(weeks)
+    seen: set[uuid.UUID] = set()
+    week_status: list[tuple[int, str]] = []
+    # Upsert вместо delete+insert: статусы закрытых пунктов не теряются.
     for week in weeks:
         for pos, item in enumerate(week.items):
-            db.add(
-                PlanItem(
-                    plan_id=plan.id,
-                    skill_id=item.skill.id,
-                    week_number=week.week,
-                    estimated_hours=item.hours,
-                    position=pos,
-                    status="planned",
+            skill_id = item.skill.id
+            seen.add(skill_id)
+            old = existing.get(skill_id)
+            if old is not None:
+                old.week_number = week.week
+                old.position = pos
+                old.estimated_hours = item.hours
+                item.status = _as_plan_status(old.status)
+            else:
+                db.add(
+                    PlanItem(
+                        plan_id=plan.id,
+                        skill_id=skill_id,
+                        week_number=week.week,
+                        estimated_hours=item.hours,
+                        position=pos,
+                        status=PlanItemStatus.PLANNED.value,
+                    )
                 )
-            )
+                item.status = PlanItemStatus.PLANNED
+            week_status.append((week.week, item.status.value))
+
+    for skill_id, old in existing.items():
+        if skill_id not in seen:
+            await db.delete(old)
+
+    plan.current_week = _current_week_from_pairs(week_status)
     await db.commit()
     await db.refresh(plan)
     return plan
 
 
-async def get_or_build_plan(db: AsyncSession, user: User) -> TrajectoryResponse:
-    """GET /me/plan — вернуть сохранённый или сгенерировать и сохранить."""
-    pid = _require_target(user)
-    plan = await db.scalar(
+def _as_plan_status(value: str | PlanItemStatus) -> PlanItemStatus:
+    try:
+        return PlanItemStatus(value)
+    except ValueError:
+        return PlanItemStatus.PLANNED
+
+
+def _current_week_from_pairs(pairs: list[tuple[int, str]]) -> int:
+    pending = [week for week, st in pairs if st != PlanItemStatus.DONE.value]
+    if pending:
+        return min(pending)
+    return max((week for week, _ in pairs), default=1)
+
+
+def _resolve_current_week(items: list[PlanItem]) -> int:
+    """Текущая неделя — первая, где есть незакрытые пункты."""
+    pending = [
+        it.week_number
+        for it in items
+        if _as_plan_status(it.status) != PlanItemStatus.DONE
+    ]
+    if pending:
+        return min(pending)
+    return max((it.week_number for it in items), default=1)
+
+
+async def _load_plan(
+    db: AsyncSession, user_id: uuid.UUID, profession_id: uuid.UUID
+) -> Plan | None:
+    return await db.scalar(
         select(Plan)
-        .where(Plan.user_id == user.id, Plan.profession_id == pid)
+        .where(Plan.user_id == user_id, Plan.profession_id == profession_id)
         .options(selectinload(Plan.items).selectinload(PlanItem.skill))
     )
-    if plan is None or not plan.items:
-        return await build_trajectory(db, user, pid, persist=True)
 
-    profession = await get_profession_or_404(db, pid)
-    res_map = await _resources_for_skills(
-        db, [it.skill_id for it in plan.items]
+
+async def _sync_plan_with_user_skills(
+    db: AsyncSession, user: User, plan: Plan
+) -> bool:
+    """Отметки «освоено» на карте переносим в пункты плана."""
+    skill_ids = [it.skill_id for it in plan.items]
+    if not skill_ids:
+        return False
+    rows = await db.scalars(
+        select(UserSkill).where(
+            UserSkill.user_id == user.id, UserSkill.skill_id.in_(skill_ids)
+        )
     )
+    mastered = {row.skill_id for row in rows if row.status in DONE}
+    changed = False
+    for item in plan.items:
+        if item.skill_id in mastered and _as_plan_status(item.status) != PlanItemStatus.DONE:
+            item.status = PlanItemStatus.DONE.value
+            changed = True
+    return changed
+
+
+async def _apply_plan_status_to_skill(
+    db: AsyncSession, user_id: uuid.UUID, skill_id: uuid.UUID, plan_status: str
+) -> None:
+    target = PLAN_TO_SKILL_STATUS.get(plan_status)
+    if target is None:
+        return
+    us = await db.scalar(
+        select(UserSkill).where(
+            UserSkill.user_id == user_id, UserSkill.skill_id == skill_id
+        )
+    )
+    if us is None:
+        us = UserSkill(user_id=user_id, skill_id=skill_id)
+        db.add(us)
+    us.status = target.value
+
+
+async def _plan_response(
+    db: AsyncSession, user: User, plan: Plan
+) -> TrajectoryResponse:
+    """Собрать TrajectoryResponse из сохранённого плана (со статусами пунктов)."""
+    profession = await get_profession_or_404(db, plan.profession_id)
+    res_map = await _resources_for_skills(db, [it.skill_id for it in plan.items])
     by_week: dict[int, list[TrajectoryWeekItem]] = defaultdict(list)
     for it in sorted(plan.items, key=lambda x: (x.week_number, x.position)):
-        skill = it.skill
-        brief = _brief(skill)
-        resources = [_resource_brief(r) for r in res_map.get(it.skill_id, [])]
         by_week[it.week_number].append(
             TrajectoryWeekItem(
-                skill=brief,
+                item_id=it.id,
+                skill=_brief(it.skill),
                 hours=it.estimated_hours,
-                resources=resources,
-                status=it.status,
+                resources=[
+                    _resource_brief(r) for r in res_map.get(it.skill_id, [])
+                ],
+                status=_as_plan_status(it.status),
             )
         )
+
     weeks: list[TrajectoryWeek] = []
-    for wn in sorted(by_week.keys()):
-        items = by_week[wn]
-        skills = [i.skill for i in items]
-        hours = sum(i.hours for i in items)
+    for week_number in sorted(by_week):
+        items = by_week[week_number]
+        skills = [item.skill for item in items]
         weeks.append(
             TrajectoryWeek(
-                week=wn,
-                title=f"Неделя {wn}",
+                week=week_number,
+                title=f"Неделя {week_number}",
                 items=items,
                 skills=skills,
-                estimated_hours=hours,
+                estimated_hours=sum(item.hours for item in items),
                 focus=skills[0].title if skills else "",
             )
         )
-    cw = plan.current_week or 1
-    what = by_week.get(cw, by_week.get(1, []))
+
+    current_week = min(
+        plan.current_week or 1,
+        plan.total_weeks or (weeks[-1].week if weeks else 1),
+    )
+    week_items = by_week.get(current_week) or (
+        by_week[min(by_week)] if by_week else []
+    )
+    what = [item for item in week_items if item.status != PlanItemStatus.DONE]
+
     return TrajectoryResponse(
         profession_id=profession.id,
         profession_title=profession.title,
         level=user.level.value if user.level else None,
         hours_per_week=plan.hours_per_week,
-        total_weeks=plan.total_weeks,
-        current_week=cw,
+        total_weeks=plan.total_weeks or len(weeks),
+        current_week=current_week,
         weeks=weeks,
         what_to_do_this_week=what,
     )
 
 
+async def get_or_build_plan(
+    db: AsyncSession, user: User, profession_id: uuid.UUID | None = None
+) -> TrajectoryResponse:
+    """GET /me/plan и /me/trajectory — сохранённый план с прогрессом по пунктам."""
+    pid = profession_id or _require_target(user)
+    await get_profession_or_404(db, pid)
+
+    plan = await _load_plan(db, user.id, pid)
+    hours_per_week = user.hours_per_week or 6
+    if plan is None or not plan.items or plan.hours_per_week != hours_per_week:
+        keep = (
+            {
+                it.skill_id
+                for it in plan.items
+                if _as_plan_status(it.status) == PlanItemStatus.DONE
+            }
+            if plan is not None
+            else set()
+        )
+        await build_trajectory(
+            db, user, pid, persist=True, keep_done_skill_ids=keep
+        )
+        plan = await _load_plan(db, user.id, pid)
+    if plan is None:  # план не построился: у профессии нет навыков
+        return await build_trajectory(db, user, pid)
+
+    if await _sync_plan_with_user_skills(db, user, plan):
+        plan.current_week = _resolve_current_week(plan.items)
+        await db.commit()
+
+    return await _plan_response(db, user, plan)
+
+
+async def set_plan_item_status(
+    db: AsyncSession, user: User, item_id: uuid.UUID, data: PlanItemUpdate
+) -> PlanItem:
+    """PATCH /me/plan/items/{item_id} — отметить пункт плана (недели)."""
+    plan = await db.scalar(
+        select(Plan)
+        .join(PlanItem, PlanItem.plan_id == Plan.id)
+        .where(PlanItem.id == item_id, Plan.user_id == user.id)
+        .options(selectinload(Plan.items))
+    )
+    if plan is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Пункт плана не найден")
+    item = next((it for it in plan.items if it.id == item_id), None)
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Пункт плана не найден")
+
+    item.status = data.status.value
+    await _apply_plan_status_to_skill(db, user.id, item.skill_id, item.status)
+    plan.current_week = _resolve_current_week(plan.items)
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+async def complete_plan_week(
+    db: AsyncSession, user: User, week_number: int
+) -> TrajectoryResponse:
+    """POST /me/plan/weeks/{week_number}/complete — закрыть неделю целиком."""
+    pid = _require_target(user)
+    plan = await _load_plan(db, user.id, pid)
+    if plan is None or not plan.items:
+        await build_trajectory(db, user, pid, persist=True)
+        plan = await _load_plan(db, user.id, pid)
+    if plan is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "План не найден")
+
+    week_items = [it for it in plan.items if it.week_number == week_number]
+    if not week_items:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, f"В плане нет недели {week_number}"
+        )
+
+    for item in week_items:
+        item.status = PlanItemStatus.DONE.value
+        await _apply_plan_status_to_skill(
+            db, user.id, item.skill_id, item.status
+        )
+    plan.current_week = _resolve_current_week(plan.items)
+    await db.commit()
+
+    plan = await _load_plan(db, user.id, pid)
+    if plan is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "План не найден")
+    return await _plan_response(db, user, plan)
+
+
 async def recalculate_plan(db: AsyncSession, user: User) -> TrajectoryResponse:
     """POST /me/plan/recalculate — пересобрать с учётом текущего прогресса."""
-    return await build_trajectory(db, user, persist=True)
+    pid = _require_target(user)
+    current = await _load_plan(db, user.id, pid)
+    keep = (
+        {
+            it.skill_id
+            for it in current.items
+            if _as_plan_status(it.status) == PlanItemStatus.DONE
+        }
+        if current is not None
+        else set()
+    )
+    await build_trajectory(db, user, pid, persist=True, keep_done_skill_ids=keep)
+    plan = await _load_plan(db, user.id, pid)
+    if plan is None:
+        return await build_trajectory(db, user, pid)
+    return await _plan_response(db, user, plan)
 
 
 async def dashboard(db: AsyncSession, user: User) -> DashboardResponse:

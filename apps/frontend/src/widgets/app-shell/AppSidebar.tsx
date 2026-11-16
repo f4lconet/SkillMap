@@ -7,7 +7,7 @@ import { Progress } from '@/shared/ui';
 
 const NAV = [
   { href: '/map', label: 'Карта', icon: 'map', ready: true },
-  { href: '/trajectory', label: 'Траектория', icon: 'path', ready: false },
+  { href: '/trajectory', label: 'Траектория', icon: 'path', ready: true },
   { href: '/gap', label: 'Gap Analysis', icon: 'gap', ready: false },
   { href: '/dashboard', label: 'Дашборд', icon: 'chart', ready: false },
   { href: '/integrations', label: 'Интеграции', icon: 'plug', ready: false },

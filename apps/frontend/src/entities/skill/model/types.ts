@@ -1,5 +1,8 @@
-/** Статусы навыка — app/models/enums.py::SkillStatus */
+/** Статус навыка — app/models/enums.py::SkillStatus */
 export type SkillStatus = 'not_started' | 'learning' | 'mastered' | 'skipped';
+
+/** Статус пункта плана — app/models/enums.py::PlanItemStatus */
+export type PlanItemStatus = 'planned' | 'in_progress' | 'done';
 
 export type DependencyType = 'required' | 'recommended';
 
@@ -80,10 +83,44 @@ export interface GapAnalysis {
   estimatedRemainingHours: number | null;
 }
 
+/** app/schemas/skill.py::ResourceBrief */
+export interface ResourceBrief {
+  id: string;
+  title: string;
+  url: string;
+  resourceType: string;
+  isFree: boolean;
+  provider: string;
+  estimatedHours: number | null;
+}
+
+/** app/schemas/skill.py::TrajectoryWeekItem */
+export interface TrajectoryWeekItem {
+  skill: SkillBrief;
+  hours: number;
+  resources: ResourceBrief[];
+  status: PlanItemStatus;
+  /** id сохранённого пункта плана — для PATCH /me/plan/items/{itemId} */
+  itemId: string | null;
+}
+
+/** app/schemas/skill.py::PlanItemRead */
+export interface PlanItem {
+  id: string;
+  planId: string;
+  skillId: string;
+  weekNumber: number;
+  estimatedHours: number;
+  position: number;
+  status: PlanItemStatus;
+}
+
 /** app/schemas/skill.py::TrajectoryWeek */
 export interface TrajectoryWeek {
   week: number;
   title: string;
+  items: TrajectoryWeekItem[];
+  /** @deprecated дублирует items — оставлено для обратной совместимости API */
   skills: SkillBrief[];
   estimatedHours: number;
   focus: string;
@@ -96,7 +133,9 @@ export interface Trajectory {
   level: string | null;
   hoursPerWeek: number;
   totalWeeks: number;
+  currentWeek: number;
   weeks: TrajectoryWeek[];
+  whatToDoThisWeek: TrajectoryWeekItem[];
 }
 
 export const SKILL_STATUS_LABELS: Record<SkillStatus, string> = {
