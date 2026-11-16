@@ -102,6 +102,8 @@ export interface TrajectoryWeekItem {
   status: PlanItemStatus;
   /** id сохранённого пункта плана — для PATCH /me/plan/items/{itemId} */
   itemId: string | null;
+  /** Часы навыка не влезли в неделю — это продолжение со следующей недели */
+  continued: boolean;
 }
 
 /** app/schemas/skill.py::PlanItemRead */

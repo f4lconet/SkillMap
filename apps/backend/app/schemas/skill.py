@@ -126,6 +126,8 @@ class TrajectoryWeekItem(BaseModel):
     status: PlanItemStatus = PlanItemStatus.PLANNED
     # id сохранённого пункта плана — нужен для PATCH /me/plan/items/{item_id}
     item_id: uuid.UUID | None = None
+    # навык не влез в неделю целиком — это продолжение, часы перенесены вперёд
+    continued: bool = False
 
 
 class PlanItemUpdate(BaseModel):

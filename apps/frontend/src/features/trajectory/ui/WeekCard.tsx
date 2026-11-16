@@ -27,11 +27,16 @@ function ItemRow({
       <div className="min-w-0 flex-1">
         <p
           className={cn(
-            'text-body font-medium',
+            'flex flex-wrap items-center gap-1.5 text-body font-medium',
             mastered ? 'text-secondary line-through' : 'text-text'
           )}
         >
-          {item.skill.title}
+          <span>{item.skill.title}</span>
+          {item.continued && (
+            <span className="rounded-full bg-page px-2 py-0.5 text-helper font-normal text-secondary no-underline">
+              продолжение
+            </span>
+          )}
         </p>
         <p className="mt-0.5 text-helper text-secondary">
           {item.skill.category}
@@ -145,7 +150,7 @@ export function WeekCard({
       <div className="mt-4">
         {week.items.map((item) => (
           <ItemRow
-            key={item.skill.id}
+            key={item.itemId ?? item.skill.id}
             item={item}
             saving={savingItemId === item.itemId}
             onToggle={() => onToggleItem(item.itemId ?? '')}

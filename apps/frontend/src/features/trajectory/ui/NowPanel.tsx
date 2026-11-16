@@ -46,7 +46,7 @@ export function NowPanel({
           {items.map((item) => {
             const mastered = item.status === 'done';
             return (
-              <li key={item.skill.id} className="flex items-start gap-2.5">
+              <li key={item.itemId ?? item.skill.id} className="flex items-start gap-2.5">
                 <SkillCheck
                   checked={mastered}
                   disabled={savingItemId === item.itemId}
@@ -63,7 +63,8 @@ export function NowPanel({
                     {item.skill.title}
                   </p>
                   <p className="mt-0.5 text-helper text-secondary">
-                    {item.skill.category} · {item.hours} ч
+                    {item.skill.category}
+                    {item.continued && ' · продолжение'} · {item.hours} ч
                   </p>
                   {item.resources.length > 0 && (
                     <ul className="mt-1.5 space-y-1">

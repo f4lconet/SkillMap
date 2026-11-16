@@ -46,13 +46,6 @@ from app.schemas.skill import (
 
 DONE = {SkillStatus.MASTERED.value, SkillStatus.SKIPPED.value}
 
-# Пункт плана → статус навыка: отметка на неделе синхронизируется с прогрессом.
-PLAN_TO_SKILL_STATUS = {
-    PlanItemStatus.DONE.value: SkillStatus.MASTERED,
-    PlanItemStatus.IN_PROGRESS.value: SkillStatus.LEARNING,
-    PlanItemStatus.PLANNED.value: SkillStatus.NOT_STARTED,
-}
-
 
 async def get_profession_or_404(db: AsyncSession, profession_id: uuid.UUID) -> Profession:
     profession = await db.get(Profession, profession_id)
@@ -433,6 +426,12 @@ async def _build_week_items(
     res_map: dict[uuid.UUID, list[Resource]],
     hours_per_week: int,
 ) -> list[TrajectoryWeek]:
+    """Раскладывает навыки по неделям ровно по hours_per_week часов.
+
+    Навык, который не влезает в остаток недели, делится: оставшиеся часы
+    переносятся на следующую неделю. Свободное место недели добирается
+    часами следующего навыка, поэтому неделя всегда заполнена целиком.
+    """
     prefer = {ps.skill_id: ps.position for ps in remaining_links}
     ordered_ids = _topo_sort(
         [ps.skill_id for ps in remaining_links], deps_map, prefer
@@ -467,19 +466,28 @@ async def _build_week_items(
     for sid in ordered_ids:
         ps = by_id[sid]
         skill = ps.skill
-        h = skill.estimated_hours or 4
         brief = _brief(skill)
         resources = [_resource_brief(r) for r in res_map.get(sid, [])]
-        item = TrajectoryWeekItem(skill=brief, hours=h, resources=resources)
-        if current_hours + h > max_h and current_items:
-            flush()
-        current_items.append(item)
-        current_hours += h
-        if current_hours >= max_h:
-            flush()
+        left = skill.estimated_hours or 4
+        chunk = 0
+        while left > 0:
+            if current_hours >= max_h:
+                flush()
+            take = min(max_h - current_hours, left)
+            current_items.append(
+                TrajectoryWeekItem(
+                    skill=brief,
+                    hours=take,
+                    resources=resources,
+                    continued=chunk > 0,
+                )
+            )
+            current_hours += take
+            left -= take
+            chunk += 1
+            if current_hours >= max_h:
+                flush()
     flush()
-    if len(weeks) > 24:
-        weeks = weeks[:24]
     return weeks
 
 
@@ -564,21 +572,27 @@ async def _persist_plan(
         )
         db.add(plan)
         await db.flush()
-        existing: dict[uuid.UUID, PlanItem] = {}
+        existing: dict[uuid.UUID, list[PlanItem]] = {}
     else:
-        existing = {it.skill_id: it for it in plan.items}
         plan.hours_per_week = hours_per_week
         plan.generated_at = now
+        # Навык может занимать несколько недель, поэтому храним все его части
+        # по порядку — по ним же восстанавливаем статусы.
+        existing = defaultdict(list)
+        for it in sorted(plan.items, key=lambda x: (x.week_number, x.position)):
+            existing[it.skill_id].append(it)
 
     plan.total_weeks = len(weeks)
-    seen: set[uuid.UUID] = set()
+    used: dict[uuid.UUID, int] = defaultdict(int)
     week_status: list[tuple[int, str]] = []
     # Upsert вместо delete+insert: статусы закрытых пунктов не теряются.
     for week in weeks:
         for pos, item in enumerate(week.items):
             skill_id = item.skill.id
-            seen.add(skill_id)
-            old = existing.get(skill_id)
+            chunk = used[skill_id]
+            used[skill_id] = chunk + 1
+            chunks = existing.get(skill_id, [])
+            old = chunks[chunk] if chunk < len(chunks) else None
             if old is not None:
                 old.week_number = week.week
                 old.position = pos
@@ -598,8 +612,8 @@ async def _persist_plan(
                 item.status = PlanItemStatus.PLANNED
             week_status.append((week.week, item.status.value))
 
-    for skill_id, old in existing.items():
-        if skill_id not in seen:
+    for skill_id, chunks in existing.items():
+        for old in chunks[used[skill_id] :]:
             await db.delete(old)
 
     plan.current_week = _current_week_from_pairs(week_status)
@@ -634,6 +648,26 @@ def _resolve_current_week(items: list[PlanItem]) -> int:
     return max((it.week_number for it in items), default=1)
 
 
+def _plan_matches_hours(plan: Plan, hours_per_week: int) -> bool:
+    """Каждая неделя, кроме последней, должна быть заполнена ровно по норме.
+
+    Нужно для старых планов, собранных без дробления навыков по неделям.
+    """
+    by_week: dict[int, int] = defaultdict(int)
+    for it in plan.items:
+        by_week[it.week_number] += it.estimated_hours
+    if not by_week:
+        return False
+    last_week = max(by_week)
+    for week, total in by_week.items():
+        if week == last_week:
+            if total <= 0 or total > hours_per_week:
+                return False
+        elif total != hours_per_week:
+            return False
+    return True
+
+
 async def _load_plan(
     db: AsyncSession, user_id: uuid.UUID, profession_id: uuid.UUID
 ) -> Plan | None:
@@ -665,12 +699,27 @@ async def _sync_plan_with_user_skills(
     return changed
 
 
-async def _apply_plan_status_to_skill(
-    db: AsyncSession, user_id: uuid.UUID, skill_id: uuid.UUID, plan_status: str
+def _aggregate_skill_status(chunks: list[PlanItem]) -> SkillStatus:
+    """Статус навыка по всем его частям в плане.
+
+    Навык может занимать несколько недель: он освоен только когда закрыты
+    все его части, и «в процессе», если закрыта или начата хотя бы одна.
+    """
+    statuses = [_as_plan_status(it.status) for it in chunks]
+    if not statuses:
+        return SkillStatus.NOT_STARTED
+    if all(st == PlanItemStatus.DONE for st in statuses):
+        return SkillStatus.MASTERED
+    if any(st != PlanItemStatus.PLANNED for st in statuses):
+        return SkillStatus.LEARNING
+    return SkillStatus.NOT_STARTED
+
+
+async def _sync_skill_status_from_plan(
+    db: AsyncSession, user_id: uuid.UUID, plan: Plan, skill_id: uuid.UUID
 ) -> None:
-    target = PLAN_TO_SKILL_STATUS.get(plan_status)
-    if target is None:
-        return
+    chunks = [it for it in plan.items if it.skill_id == skill_id]
+    target = _aggregate_skill_status(chunks)
     us = await db.scalar(
         select(UserSkill).where(
             UserSkill.user_id == user_id, UserSkill.skill_id == skill_id
@@ -689,6 +738,7 @@ async def _plan_response(
     profession = await get_profession_or_404(db, plan.profession_id)
     res_map = await _resources_for_skills(db, [it.skill_id for it in plan.items])
     by_week: dict[int, list[TrajectoryWeekItem]] = defaultdict(list)
+    seen_skills: set[uuid.UUID] = set()
     for it in sorted(plan.items, key=lambda x: (x.week_number, x.position)):
         by_week[it.week_number].append(
             TrajectoryWeekItem(
@@ -699,8 +749,10 @@ async def _plan_response(
                     _resource_brief(r) for r in res_map.get(it.skill_id, [])
                 ],
                 status=_as_plan_status(it.status),
+                continued=it.skill_id in seen_skills,
             )
         )
+        seen_skills.add(it.skill_id)
 
     weeks: list[TrajectoryWeek] = []
     for week_number in sorted(by_week):
@@ -747,7 +799,12 @@ async def get_or_build_plan(
 
     plan = await _load_plan(db, user.id, pid)
     hours_per_week = user.hours_per_week or 6
-    if plan is None or not plan.items or plan.hours_per_week != hours_per_week:
+    if (
+        plan is None
+        or not plan.items
+        or plan.hours_per_week != hours_per_week
+        or not _plan_matches_hours(plan, hours_per_week)
+    ):
         keep = (
             {
                 it.skill_id
@@ -788,7 +845,7 @@ async def set_plan_item_status(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Пункт плана не найден")
 
     item.status = data.status.value
-    await _apply_plan_status_to_skill(db, user.id, item.skill_id, item.status)
+    await _sync_skill_status_from_plan(db, user.id, plan, item.skill_id)
     plan.current_week = _resolve_current_week(plan.items)
     await db.commit()
     await db.refresh(item)
@@ -815,9 +872,8 @@ async def complete_plan_week(
 
     for item in week_items:
         item.status = PlanItemStatus.DONE.value
-        await _apply_plan_status_to_skill(
-            db, user.id, item.skill_id, item.status
-        )
+    for skill_id in {it.skill_id for it in week_items}:
+        await _sync_skill_status_from_plan(db, user.id, plan, skill_id)
     plan.current_week = _resolve_current_week(plan.items)
     await db.commit()
 
