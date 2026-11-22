@@ -1,0 +1,502 @@
+{
+  "rules": {
+    "mastered_min_level": 2,
+    "partial_hours_discount": false,
+    "match_percent_formula": "round(mastered_count / total_skills * 100, 1)",
+    "order_tie_breakers": [
+      "user_level DESC",
+      "layer ASC",
+      "unlocks_count DESC",
+      "hours ASC",
+      "id ASC"
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "TC-01",
+      "description": "Новичок DS с нуля, 6 ч/нед (минимальная нагрузка, 0% готовности)",
+      "target_slug": "data-scientist",
+      "hours_per_week": 6,
+      "input_levels": {},
+      "expected": {
+        "total_skills": 32,
+        "mastered_count": 0,
+        "in_progress_count": 0,
+        "missing_count": 32,
+        "match_percent": 0.0,
+        "available_now": [
+          "calculus",
+          "git-cli",
+          "linear-algebra",
+          "probability",
+          "py-basics",
+          "sql-queries"
+        ],
+        "blocked_count": 26,
+        "remaining_hours": 651,
+        "estimated_weeks_ceil": 109,
+        "first_5_in_plan": [
+          "py-basics",
+          "git-cli",
+          "linear-algebra",
+          "sql-queries",
+          "calculus"
+        ],
+        "first_6_weeks_plan": [
+          {
+            "week": 1,
+            "skill_id": "py-basics",
+            "hours_in_week": 6
+          },
+          {
+            "week": 2,
+            "skill_id": "py-basics",
+            "hours_in_week": 6
+          },
+          {
+            "week": 3,
+            "skill_id": "py-basics",
+            "hours_in_week": 6
+          },
+          {
+            "week": 4,
+            "skill_id": "py-basics",
+            "hours_in_week": 6
+          },
+          {
+            "week": 5,
+            "skill_id": "py-basics",
+            "hours_in_week": 6
+          },
+          {
+            "week": 6,
+            "skill_id": "git-cli",
+            "hours_in_week": 6
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "TC-02",
+      "description": "Студентка 3 курса DS (как в Аналитике: Python, SQL, Git, Pandas, NumPy, Jupyter освоены; линейная алгебра в процессе=1)",
+      "target_slug": "data-scientist",
+      "hours_per_week": 6,
+      "input_levels": {
+        "git-cli": 2,
+        "jupyter": 2,
+        "linear-algebra": 1,
+        "numpy": 2,
+        "pandas": 2,
+        "py-basics": 3,
+        "sql-queries": 2
+      },
+      "expected": {
+        "total_skills": 32,
+        "mastered_count": 6,
+        "in_progress_count": 1,
+        "missing_count": 26,
+        "match_percent": 18.8,
+        "available_now": [
+          "calculus",
+          "data-cleaning",
+          "data-viz",
+          "docker-basics",
+          "linear-algebra",
+          "probability",
+          "py-oop",
+          "sql-advanced"
+        ],
+        "blocked_count": 18,
+        "remaining_hours": 552,
+        "estimated_weeks_ceil": 92,
+        "first_5_in_plan": [
+          "linear-algebra",
+          "calculus",
+          "probability",
+          "math-stats",
+          "docker-basics"
+        ],
+        "first_6_weeks_plan": [
+          {
+            "week": 1,
+            "skill_id": "linear-algebra",
+            "hours_in_week": 6
+          },
+          {
+            "week": 2,
+            "skill_id": "linear-algebra",
+            "hours_in_week": 6
+          },
+          {
+            "week": 3,
+            "skill_id": "linear-algebra",
+            "hours_in_week": 6
+          },
+          {
+            "week": 4,
+            "skill_id": "linear-algebra",
+            "hours_in_week": 6
+          },
+          {
+            "week": 5,
+            "skill_id": "linear-algebra",
+            "hours_in_week": 6
+          },
+          {
+            "week": 6,
+            "skill_id": "calculus",
+            "hours_in_week": 6
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "TC-03",
+      "description": "Продвинутый DS (19 навыков освоены >=2, ab-tests=1 в процессе, добор ML/DL при 10 ч/нед)",
+      "target_slug": "data-scientist",
+      "hours_per_week": 10,
+      "input_levels": {
+        "ab-tests": 1,
+        "calculus": 2,
+        "data-cleaning": 2,
+        "data-viz": 2,
+        "eda": 2,
+        "git-cli": 2,
+        "jupyter": 3,
+        "linear-algebra": 2,
+        "math-stats": 2,
+        "ml-basics": 2,
+        "ml-metrics": 2,
+        "numpy": 3,
+        "pandas": 3,
+        "probability": 2,
+        "py-basics": 3,
+        "py-oop": 2,
+        "regression": 2,
+        "sklearn": 2,
+        "sql-advanced": 2,
+        "sql-queries": 2
+      },
+      "expected": {
+        "total_skills": 32,
+        "mastered_count": 19,
+        "in_progress_count": 1,
+        "missing_count": 13,
+        "match_percent": 59.4,
+        "available_now": [
+          "ab-tests",
+          "deep-learning",
+          "docker-basics",
+          "feature-eng",
+          "metrics-framing",
+          "results-presentation",
+          "time-series",
+          "trees-ensembles",
+          "unsupervised"
+        ],
+        "blocked_count": 4,
+        "remaining_hours": 288,
+        "estimated_weeks_ceil": 29,
+        "first_5_in_plan": [
+          "ab-tests",
+          "docker-basics",
+          "trees-ensembles",
+          "unsupervised",
+          "deep-learning"
+        ],
+        "first_6_weeks_plan": [
+          {
+            "week": 1,
+            "skill_id": "ab-tests",
+            "hours_in_week": 10
+          },
+          {
+            "week": 2,
+            "skill_id": "ab-tests",
+            "hours_in_week": 5
+          },
+          {
+            "week": 2,
+            "skill_id": "docker-basics",
+            "hours_in_week": 5
+          },
+          {
+            "week": 3,
+            "skill_id": "docker-basics",
+            "hours_in_week": 7
+          },
+          {
+            "week": 3,
+            "skill_id": "trees-ensembles",
+            "hours_in_week": 3
+          },
+          {
+            "week": 4,
+            "skill_id": "trees-ensembles",
+            "hours_in_week": 10
+          },
+          {
+            "week": 5,
+            "skill_id": "trees-ensembles",
+            "hours_in_week": 7
+          },
+          {
+            "week": 5,
+            "skill_id": "unsupervised",
+            "hours_in_week": 3
+          },
+          {
+            "week": 6,
+            "skill_id": "unsupervised",
+            "hours_in_week": 10
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "TC-04",
+      "description": "Fullstack-новичок с базой вёрстки и JS (js-dom=1 в процессе, 10 ч/нед)",
+      "target_slug": "fullstack-developer",
+      "hours_per_week": 10,
+      "input_levels": {
+        "css-layout": 2,
+        "git-cli": 2,
+        "html-semantic": 3,
+        "http-basics": 2,
+        "js-basics": 2,
+        "js-dom": 1,
+        "responsive": 2
+      },
+      "expected": {
+        "total_skills": 31,
+        "mastered_count": 6,
+        "in_progress_count": 1,
+        "missing_count": 25,
+        "match_percent": 19.4,
+        "available_now": [
+          "algo-basics",
+          "build-tools",
+          "code-review",
+          "deploy",
+          "docker-basics",
+          "js-dom",
+          "js-es6-async",
+          "sql-queries"
+        ],
+        "blocked_count": 17,
+        "remaining_hours": 436,
+        "estimated_weeks_ceil": 44,
+        "first_5_in_plan": [
+          "js-dom",
+          "sql-queries",
+          "js-es6-async",
+          "db-schema",
+          "deploy"
+        ],
+        "first_6_weeks_plan": [
+          {
+            "week": 1,
+            "skill_id": "js-dom",
+            "hours_in_week": 10
+          },
+          {
+            "week": 2,
+            "skill_id": "js-dom",
+            "hours_in_week": 2
+          },
+          {
+            "week": 2,
+            "skill_id": "sql-queries",
+            "hours_in_week": 8
+          },
+          {
+            "week": 3,
+            "skill_id": "sql-queries",
+            "hours_in_week": 10
+          },
+          {
+            "week": 4,
+            "skill_id": "sql-queries",
+            "hours_in_week": 2
+          },
+          {
+            "week": 4,
+            "skill_id": "js-es6-async",
+            "hours_in_week": 8
+          },
+          {
+            "week": 5,
+            "skill_id": "js-es6-async",
+            "hours_in_week": 10
+          },
+          {
+            "week": 6,
+            "skill_id": "js-es6-async",
+            "hours_in_week": 2
+          },
+          {
+            "week": 6,
+            "skill_id": "db-schema",
+            "hours_in_week": 8
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "TC-05",
+      "description": "UX/UI-дизайнер начального уровня (основы и Figma освоены, ux-research=1, 8 ч/нед)",
+      "target_slug": "ux-ui-designer",
+      "hours_per_week": 8,
+      "input_levels": {
+        "color-contrast": 2,
+        "competitor-analysis": 2,
+        "figma-basics": 2,
+        "typography": 2,
+        "ui-basics": 2,
+        "user-flow": 2,
+        "ux-basics": 3,
+        "ux-research": 1,
+        "wireframes": 2
+      },
+      "expected": {
+        "total_skills": 26,
+        "mastered_count": 8,
+        "in_progress_count": 1,
+        "missing_count": 18,
+        "match_percent": 30.8,
+        "available_now": [
+          "accessibility",
+          "design-presentation",
+          "html-css-for-designers",
+          "icons-illustration",
+          "info-architecture",
+          "interactive-prototypes",
+          "responsive-design",
+          "team-work",
+          "ui-kit",
+          "ux-research",
+          "ux-writing"
+        ],
+        "blocked_count": 7,
+        "remaining_hours": 253,
+        "estimated_weeks_ceil": 32,
+        "first_5_in_plan": [
+          "ux-research",
+          "design-presentation",
+          "html-css-for-designers",
+          "team-work",
+          "ux-writing"
+        ],
+        "first_6_weeks_plan": [
+          {
+            "week": 1,
+            "skill_id": "ux-research",
+            "hours_in_week": 8
+          },
+          {
+            "week": 2,
+            "skill_id": "ux-research",
+            "hours_in_week": 8
+          },
+          {
+            "week": 3,
+            "skill_id": "ux-research",
+            "hours_in_week": 4
+          },
+          {
+            "week": 3,
+            "skill_id": "design-presentation",
+            "hours_in_week": 4
+          },
+          {
+            "week": 4,
+            "skill_id": "design-presentation",
+            "hours_in_week": 4
+          },
+          {
+            "week": 4,
+            "skill_id": "html-css-for-designers",
+            "hours_in_week": 4
+          },
+          {
+            "week": 5,
+            "skill_id": "html-css-for-designers",
+            "hours_in_week": 8
+          },
+          {
+            "week": 6,
+            "skill_id": "html-css-for-designers",
+            "hours_in_week": 8
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "TC-06",
+      "description": "Смена цели Fullstack → Data Scientist: перенос общих навыков (git-cli, sql-queries, docker-basics = 2)",
+      "target_slug": "data-scientist",
+      "hours_per_week": 10,
+      "input_levels": {
+        "docker-basics": 2,
+        "git-cli": 2,
+        "sql-queries": 2
+      },
+      "expected": {
+        "total_skills": 32,
+        "mastered_count": 3,
+        "in_progress_count": 0,
+        "missing_count": 29,
+        "match_percent": 9.4,
+        "available_now": [
+          "calculus",
+          "linear-algebra",
+          "probability",
+          "py-basics",
+          "sql-advanced"
+        ],
+        "blocked_count": 24,
+        "remaining_hours": 611,
+        "estimated_weeks_ceil": 62,
+        "first_5_in_plan": [
+          "py-basics",
+          "linear-algebra",
+          "calculus",
+          "probability",
+          "math-stats"
+        ],
+        "first_6_weeks_plan": [
+          {
+            "week": 1,
+            "skill_id": "py-basics",
+            "hours_in_week": 10
+          },
+          {
+            "week": 2,
+            "skill_id": "py-basics",
+            "hours_in_week": 10
+          },
+          {
+            "week": 3,
+            "skill_id": "py-basics",
+            "hours_in_week": 10
+          },
+          {
+            "week": 4,
+            "skill_id": "linear-algebra",
+            "hours_in_week": 10
+          },
+          {
+            "week": 5,
+            "skill_id": "linear-algebra",
+            "hours_in_week": 10
+          },
+          {
+            "week": 6,
+            "skill_id": "linear-algebra",
+            "hours_in_week": 10
+          }
+        ]
+      }
+    }
+  ]
+}

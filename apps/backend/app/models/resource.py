@@ -22,9 +22,10 @@ class Resource(Base, IdMixin, TimestampMixin):
     url: Mapped[str] = mapped_column(String(1000), default="")
     resource_type: Mapped[str] = mapped_column(
         String(30), default="course"
-    )  # course | book | project | article | video
+    )  # course | book | project | article | video | docs
     is_free: Mapped[bool] = mapped_column(Boolean, default=True)
     provider: Mapped[str] = mapped_column(String(100), default="")
+    lang: Mapped[str] = mapped_column(String(8), default="ru")
     description: Mapped[str] = mapped_column(Text, default="")
     estimated_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     position: Mapped[int] = mapped_column(Integer, default=0)

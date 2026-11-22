@@ -38,6 +38,7 @@ class ResourceBrief(BaseModel):
     resource_type: str = "course"
     is_free: bool = True
     provider: str = ""
+    lang: str = "ru"
     estimated_hours: int | None = None
 
 
@@ -114,6 +115,8 @@ class GapAnalysisResponse(BaseModel):
     mastered: list[GapAnalysisItem]
     learning: list[GapAnalysisItem]
     missing: list[GapAnalysisItem]
+    # Все неосвоенные навыки, включая «в процессе» (как считает аналитика)
+    missing_count: int = 0
     progress_percent: float
     estimated_remaining_hours: int | None = None
     match_percent: float | None = None  # alias for progress_percent (API contracts)

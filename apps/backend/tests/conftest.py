@@ -32,6 +32,12 @@ from app.models import (  # noqa: E402
 
 PASSWORD = "Strong123"
 
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.dialects.postgresql import JSONB
+
+@compiles(JSONB, "sqlite")
+def compile_jsonb_sqlite(element, compiler, **kw):
+    return "JSON"
 
 @pytest_asyncio.fixture
 async def session_factory():

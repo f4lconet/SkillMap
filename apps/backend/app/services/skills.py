@@ -1,8 +1,9 @@
 """Сервис навыков, карты, Gap, траектории, дашборда — неделя 2–3."""
 from __future__ import annotations
 
+import heapq
 import uuid
-from collections import defaultdict, deque
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
@@ -144,17 +145,42 @@ def _is_locked(
     return False
 
 
-def _topo_sort(
-    skill_ids: list[uuid.UUID],
+def _unlock_counts(
+    links_by_id: dict[uuid.UUID, ProfessionSkill],
     deps_map: dict[uuid.UUID, list[SkillDependency]],
-    prefer_order: dict[uuid.UUID, int] | None = None,
+) -> dict[uuid.UUID, int]:
+    """Сколько навыков этой профессии разблокирует навык (required-связи)."""
+    counts: dict[uuid.UUID, int] = {sid: 0 for sid in links_by_id}
+    for sid, deps in deps_map.items():
+        if sid not in links_by_id:
+            continue
+        for dep in deps:
+            if dep.dep_type != DependencyType.REQUIRED:
+                continue
+            if dep.prerequisite_id in counts:
+                counts[dep.prerequisite_id] += 1
+    return counts
+
+
+def _plan_order(
+    order_ids: list[uuid.UUID],
+    links_by_id: dict[uuid.UUID, ProfessionSkill],
+    deps_map: dict[uuid.UUID, list[SkillDependency]],
+    scores: dict[uuid.UUID, int],
 ) -> list[uuid.UUID]:
-    """Топологическая сортировка по required-зависимостям. Стабильна по position."""
-    id_set = set(skill_ids)
-    indeg: dict[uuid.UUID, int] = {sid: 0 for sid in skill_ids}
+    """Порядок изучения навыков (правило аналитика, неделя 4).
+
+    Топологическая сортировка (Kahn) по required-связям внутри выбранного
+    набора. Когда готовых к изучению навыков несколько, берётся лучший по
+    ключу: уровень пользователя DESC, layer ASC, число разблокируемых навыков
+    профессии DESC, часы ASC, slug ASC.
+    """
+    unlocks = _unlock_counts(links_by_id, deps_map)
+    id_set = set(order_ids)
+    indeg: dict[uuid.UUID, int] = {sid: 0 for sid in order_ids}
     graph: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
 
-    for sid in skill_ids:
+    for sid in order_ids:
         for dep in deps_map.get(sid, []):
             if dep.dep_type != DependencyType.REQUIRED:
                 continue
@@ -163,29 +189,32 @@ def _topo_sort(
             graph[dep.prerequisite_id].append(sid)
             indeg[sid] += 1
 
-    order_key = prefer_order or {}
-    ready = sorted(
-        [sid for sid, d in indeg.items() if d == 0],
-        key=lambda x: order_key.get(x, 10_000),
-    )
-    q = deque(ready)
+    def key(sid: uuid.UUID) -> tuple:
+        skill = links_by_id[sid].skill
+        return (
+            -(scores.get(sid) or 0),
+            skill.layer or 0,
+            -unlocks.get(sid, 0),
+            skill.estimated_hours or 0,
+            skill.slug,
+        )
+
+    heap = [(key(sid), sid) for sid, deg in indeg.items() if deg == 0]
+    heapq.heapify(heap)
     result: list[uuid.UUID] = []
 
-    while q:
-        u = q.popleft()
-        result.append(u)
-        next_nodes = sorted(graph[u], key=lambda x: order_key.get(x, 10_000))
-        for v in next_nodes:
-            indeg[v] -= 1
-            if indeg[v] == 0:
-                q.append(v)
+    while heap:
+        _, node = heapq.heappop(heap)
+        result.append(node)
+        for nxt in graph[node]:
+            indeg[nxt] -= 1
+            if indeg[nxt] == 0:
+                heapq.heappush(heap, (key(nxt), nxt))
 
-    # Если цикл — докидываем оставшиеся в исходном порядке
-    if len(result) < len(skill_ids):
+    # Остались только при цикле в данных — дописываем, чтобы не терять навыки
+    if len(result) < len(order_ids):
         seen = set(result)
-        for sid in skill_ids:
-            if sid not in seen:
-                result.append(sid)
+        result.extend(sid for sid in order_ids if sid not in seen)
     return result
 
 
@@ -364,18 +393,27 @@ async def gap_analysis(
     )
     skill_ids = [ps.skill_id for ps in links]
     deps_map = await _deps_for_skills(db, skill_ids)
-    prefer = {ps.skill_id: ps.position for ps in links}
-    ordered_ids = _topo_sort(skill_ids, deps_map, prefer)
-    priority_map = {sid: i + 1 for i, sid in enumerate(ordered_ids)}
+    links_by_id = {ps.skill_id: ps for ps in links}
 
-    us_rows = await db.scalars(
-        select(UserSkill).where(
-            UserSkill.user_id == user.id,
-            UserSkill.skill_id.in_(skill_ids or [uuid.uuid4()]),
+    us_rows = list(
+        await db.scalars(
+            select(UserSkill).where(
+                UserSkill.user_id == user.id,
+                UserSkill.skill_id.in_(skill_ids or [uuid.uuid4()]),
+            )
         )
     )
     user_map = {us.skill_id: us for us in us_rows}
     status_map = {us.skill_id: us.status for us in us_rows}
+    scores = {us.skill_id: us.self_score or 0 for us in us_rows}
+
+    remaining_ids = [
+        ps.skill_id
+        for ps in links
+        if status_map.get(ps.skill_id) not in DONE
+    ]
+    ordered_ids = _plan_order(remaining_ids, links_by_id, deps_map, scores)
+    priority_map = {sid: i + 1 for i, sid in enumerate(ordered_ids)}
 
     mastered: list[GapAnalysisItem] = []
     learning: list[GapAnalysisItem] = []
@@ -418,6 +456,9 @@ async def gap_analysis(
         mastered=mastered,
         learning=learning,
         missing=missing,
+        # «Пробел» — всё, что ещё не освоено (включая «в процессе»):
+        # так же считает аналитик в бенчмарках недели 4.
+        missing_count=total - len(mastered),
         progress_percent=progress,
         match_percent=progress,
         estimated_remaining_hours=remaining_hours or None,
@@ -429,6 +470,9 @@ async def _build_week_items(
     deps_map: dict[uuid.UUID, list[SkillDependency]],
     res_map: dict[uuid.UUID, list[Resource]],
     hours_per_week: int,
+    *,
+    scores: dict[uuid.UUID, int] | None = None,
+    links_by_id: dict[uuid.UUID, ProfessionSkill] | None = None,
 ) -> list[TrajectoryWeek]:
     """Раскладывает навыки по неделям ровно по hours_per_week часов.
 
@@ -436,11 +480,13 @@ async def _build_week_items(
     переносятся на следующую неделю. Свободное место недели добирается
     часами следующего навыка, поэтому неделя всегда заполнена целиком.
     """
-    prefer = {ps.skill_id: ps.position for ps in remaining_links}
-    ordered_ids = _topo_sort(
-        [ps.skill_id for ps in remaining_links], deps_map, prefer
-    )
     by_id = {ps.skill_id: ps for ps in remaining_links}
+    ordered_ids = _plan_order(
+        [ps.skill_id for ps in remaining_links],
+        links_by_id or by_id,
+        deps_map,
+        scores or {},
+    )
 
     weeks: list[TrajectoryWeek] = []
     current_items: list[TrajectoryWeekItem] = []
@@ -519,13 +565,16 @@ async def build_trajectory(
     deps_map = await _deps_for_skills(db, skill_ids)
     res_map = await _resources_for_skills(db, skill_ids)
 
-    us_rows = await db.scalars(
-        select(UserSkill).where(
-            UserSkill.user_id == user.id,
-            UserSkill.skill_id.in_(skill_ids or [uuid.uuid4()]),
+    us_rows = list(
+        await db.scalars(
+            select(UserSkill).where(
+                UserSkill.user_id == user.id,
+                UserSkill.skill_id.in_(skill_ids or [uuid.uuid4()]),
+            )
         )
     )
     mastered_ids = {us.skill_id for us in us_rows if us.status in DONE}
+    scores = {us.skill_id: us.self_score or 0 for us in us_rows}
     # Уже закрытые пункты плана остаются в неделях, чтобы прогресс не пропадал.
     keep = keep_done_skill_ids or set()
     remaining = [
@@ -534,7 +583,14 @@ async def build_trajectory(
         if ps.skill_id not in mastered_ids or ps.skill_id in keep
     ]
 
-    weeks = await _build_week_items(remaining, deps_map, res_map, hours_per_week)
+    weeks = await _build_week_items(
+        remaining,
+        deps_map,
+        res_map,
+        hours_per_week,
+        scores=scores,
+        links_by_id={ps.skill_id: ps for ps in links},
+    )
     what = weeks[0].items if weeks else []
 
     if persist:
