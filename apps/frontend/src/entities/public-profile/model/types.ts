@@ -1,5 +1,10 @@
 import type { ProfessionMap } from '@/entities/skill';
 import type { UserLevel } from '@/entities/user';
+import type {
+  GapAnalysis,
+  Trajectory,
+} from '@/entities/skill';
+import type { ProfessionDetail } from '@/entities/profession';
 
 /** app/schemas/share.py::PublicGapSummary */
 export interface PublicGapSummary {
@@ -42,4 +47,26 @@ export interface PublicProfile {
   map: ProfessionMap | null;
   gap: PublicGapSummary;
   plan: PublicPlanSummary;
+}
+
+/** app/schemas/share.py::ExportPayload */
+export interface ExportPayload {
+  meta: {
+    app: string;
+    version: string;
+    generatedAt: string;
+    shareUrl: string | null;
+  };
+  user: {
+    name: string;
+    email: string;
+    level: UserLevel | null;
+    hoursPerWeek: number | null;
+    targetProfessionTitle: string | null;
+  };
+  profession: ProfessionDetail;
+  map: ProfessionMap;
+  gap: GapAnalysis;
+  plan: Trajectory;
+  notes: string[];
 }

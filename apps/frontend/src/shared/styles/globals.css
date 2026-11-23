@@ -1,5 +1,4 @@
 @import 'tailwindcss';
-@config '../../../tailwind.config.ts';
 
 :root {
   /* Colors from UI-kit */
@@ -78,4 +77,46 @@
 
 .skill-edge-dimmed {
   opacity: 0.28;
+}
+
+.pdf-report {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  body {
+    min-height: auto;
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .pdf-report,
+  .pdf-report * {
+    visibility: visible;
+  }
+
+  .pdf-report {
+    display: block;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    color: #182137;
+    background: #fff;
+  }
+
+  .pdf-report .avoid-break {
+    break-inside: avoid;
+  }
+
+  .pdf-report .page-break {
+    break-before: page;
+  }
 }

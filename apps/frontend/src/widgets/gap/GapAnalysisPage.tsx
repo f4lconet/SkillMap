@@ -8,6 +8,8 @@ import { useGapData, type GapPriority } from '@/features/gap';
 import type { SkillStatus } from '@/entities/skill';
 import { USER_LEVEL_LABELS } from '@/entities/user';
 import { cn } from '@/shared/lib/cn';
+import { shareApi, type ExportPayload } from '@/entities/public-profile';
+import { PrintablePdfReport } from '@/features/pdf-export';
 
 const STATUS_UI: Record<
   SkillStatus,
@@ -52,6 +54,9 @@ function pluralSkills(count: number) {
 export function GapAnalysisPage() {
   const { user, view, loading, error, reload } = useGapData();
   const [showAll, setShowAll] = useState(false);
+  const [exportPayload, setExportPayload] = useState<ExportPayload | null>(null);
+  const [exportPending, setExportPending] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const levelLabel = user?.level ? USER_LEVEL_LABELS[user.level] : null;
   const rows = useMemo(() => view?.rows ?? [], [view]);
@@ -63,9 +68,21 @@ export function GapAnalysisPage() {
   const listedHours = visible.reduce((sum, x) => sum + x.hoursLeft, 0);
   const focus = rows[0] ?? null;
 
-  const handleExportPdf = () => {
-    if (typeof window !== 'undefined') {
+  const handleExportPdf = async () => {
+    if (!user?.targetProfession?.id) return;
+    setExportPending(true);
+    setExportError(null);
+    try {
+      const payload = await shareApi.getExport(user.targetProfession.id);
+      setExportPayload(payload);
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      );
       window.print();
+    } catch {
+      setExportError('Не удалось подготовить PDF-отчёт. Попробуйте ещё раз.');
+    } finally {
+      setExportPending(false);
     }
   };
 
@@ -149,8 +166,9 @@ export function GapAnalysisPage() {
   const notStartedPct = (s.notStarted / s.total) * 100;
 
   return (
-    <AppShell {...shellProps}>
-      <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6">
+    <>
+      <AppShell {...shellProps}>
+        <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6">
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -165,9 +183,19 @@ export function GapAnalysisPage() {
               профессии.
             </p>
           </div>
-          <Button variant="primary" onClick={handleExportPdf}>
-            ⇩ Экспорт PDF
-          </Button>
+          <div className="flex flex-col items-end gap-2">
+            <Button
+              variant="primary"
+              onClick={() => void handleExportPdf()}
+              isLoading={exportPending}
+              disabled={!user.targetProfession}
+            >
+              ⇩ Экспорт PDF
+            </Button>
+            {exportError && (
+              <p className="text-helper text-danger">{exportError}</p>
+            )}
+          </div>
         </div>
 
         {/* KPI */}
@@ -404,7 +432,9 @@ export function GapAnalysisPage() {
           В PDF: текущая цель, прогресс, список освоенных и недостающих навыков,
           приоритеты и оценка времени.
         </p>
-      </div>
-    </AppShell>
+        </div>
+      </AppShell>
+      {exportPayload && <PrintablePdfReport payload={exportPayload} />}
+    </>
   );
 }

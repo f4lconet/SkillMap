@@ -13,6 +13,8 @@ import {
 import { USER_LEVEL_LABELS } from '@/entities/user';
 import { useShareState } from '@/entities/public-profile';
 import { cn } from '@/shared/lib/cn';
+import { shareApi, type ExportPayload } from '@/entities/public-profile';
+import { PrintablePdfReport } from '@/features/pdf-export';
 
 const chips: { key: SkillFilter; label: string }[] = [
   { key: 'all', label: 'Все навыки' },
@@ -44,7 +46,28 @@ export function SkillMapPage() {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [exportPayload, setExportPayload] = useState<ExportPayload | null>(null);
+  const [exportPending, setExportPending] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const share = useShareState();
+
+  const handleExportPdf = async () => {
+    if (!user?.targetProfession?.id) return;
+    setExportPending(true);
+    setExportError(null);
+    try {
+      const payload = await shareApi.getExport(user.targetProfession.id);
+      setExportPayload(payload);
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      );
+      window.print();
+    } catch {
+      setExportError('Не удалось подготовить PDF-отчёт. Попробуйте ещё раз.');
+    } finally {
+      setExportPending(false);
+    }
+  };
 
   const handleShare = async () => {
     setShareOpen(true);
@@ -143,6 +166,7 @@ export function SkillMapPage() {
   }
 
   return header(
+    <>
     <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -164,6 +188,14 @@ export function SkillMapPage() {
           <Button
             variant="secondary"
             size="sm"
+            onClick={() => void handleExportPdf()}
+            isLoading={exportPending}
+          >
+            ⇩ Экспорт PDF
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             leftIcon={<ShareIcon />}
             onClick={() => void handleShare()}
             isLoading={share.pending === 'enable'}
@@ -174,6 +206,12 @@ export function SkillMapPage() {
           </Button>
         </div>
       </div>
+
+      {exportError && (
+        <div className="mt-4 rounded-xl border border-danger/30 bg-danger-soft px-4 py-2.5 text-helper text-danger">
+          {exportError}
+        </div>
+      )}
 
       {error && (
         <div className="mt-4 rounded-xl border border-warning/40 bg-[#FFF8E8] px-4 py-2.5 text-helper text-warning">
@@ -388,5 +426,7 @@ export function SkillMapPage() {
         )}
       </div>
     </div>
+      {exportPayload && <PrintablePdfReport payload={exportPayload} />}
+    </>
   );
 }
