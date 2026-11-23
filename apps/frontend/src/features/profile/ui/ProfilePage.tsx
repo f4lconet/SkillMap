@@ -314,7 +314,7 @@ export function ProfilePage() {
         dirty ? 'Есть несохранённые изменения' : 'Все изменения сохранены'
       }
       userName={user.name}
-      userRole={USER_ROLE_LABELS[user.role]}
+      userRole={user.role}
       goalTitle={goalTitle}
       goalProgress={progressPercent}
       userLevel={USER_LEVEL_LABELS[user.level ?? 'beginner']}

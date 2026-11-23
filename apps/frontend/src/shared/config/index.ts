@@ -14,6 +14,7 @@ export const ROUTES = {
   trajectory: '/trajectory',
   dashboard: '/dashboard',
   profile: '/profile',
+  admin: '/admin',
 } as const;
 
 export type AppRoute = (typeof ROUTES)[keyof typeof ROUTES];

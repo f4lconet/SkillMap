@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/shared/lib/cn';
+import { ROUTES } from '@/shared/config';
 import { Progress } from '@/shared/ui';
+import { USER_ROLE_LABELS, type UserRole } from '@/entities/user';
 
 const NAV = [
   { href: '/map', label: 'Карта', icon: 'map', ready: true },
@@ -58,6 +60,13 @@ function NavIcon({ name }: { name: string }) {
           <path d="M12 2v6M8 4v4M16 4v4M6 10h12v2a6 6 0 01-12 0v-2z" strokeLinecap="round" />
         </svg>
       );
+    case 'admin':
+      return (
+        <svg {...common}>
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M3 10h18M9 10v10" />
+        </svg>
+      );
     default:
       return (
         <svg {...common}>
@@ -70,7 +79,7 @@ function NavIcon({ name }: { name: string }) {
 
 type Props = {
   userName?: string;
-  userRole?: string;
+  userRole?: UserRole;
   userLevel?: string;
   goalTitle?: string;
   goalProgress?: number;
@@ -92,7 +101,10 @@ export function AppSidebar({
     .slice(0, 2)
     .toUpperCase();
 
-  const subtitle = [userRole, userLevel].filter(Boolean).join(' · ');
+  const subtitle = [userRole ? USER_ROLE_LABELS[userRole] : undefined, userLevel]
+    .filter(Boolean)
+    .join(' · ');
+  const isEditor = userRole === 'editor';
 
   return (
     <aside className="flex h-full w-[240px] shrink-0 flex-col border-r border-border bg-surface">
@@ -161,6 +173,24 @@ export function AppSidebar({
             </Link>
           );
         })}
+
+        {isEditor && (
+          <>
+            <div className="my-2 border-t border-border" />
+            <Link
+              href={ROUTES.admin}
+              className={cn(
+                'flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                pathname.startsWith(ROUTES.admin)
+                  ? 'bg-accent-soft text-accent'
+                  : 'text-secondary hover:bg-page hover:text-text'
+              )}
+            >
+              <NavIcon name="admin" />
+              Админ панель
+            </Link>
+          </>
+        )}
       </nav>
 
       {/* Goal card — рендерим только когда цель реально выбрана */}

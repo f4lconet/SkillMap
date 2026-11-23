@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.models.enums import DependencyType, Level, ProfessionStatus
+from app.schemas.skill import ProfessionMapResponse
 
 Slug = Annotated[
     str,
@@ -75,6 +77,9 @@ class ProfessionAdminRead(BaseModel):
     skills_ready: bool
     skills_count: int
     estimated_weeks: int
+    published_at: datetime | None = None
+    content_version: int = 1
+    published_by_name: str = ""
 
 
 class ProfessionAdminList(BaseModel):
@@ -105,21 +110,27 @@ class ProfessionSkillLinkRead(BaseModel):
 class SkillAdminCreate(BaseModel):
     slug: Slug
     title: ShortText
+    subtitle: Annotated[str, StringConstraints(max_length=200)] = ""
     description: Description = ""
     category: Annotated[str, StringConstraints(max_length=100)] = ""
     difficulty: int = Field(default=1, ge=1, le=5)
     layer: int = Field(default=0, ge=0, le=20)
     estimated_hours: int | None = Field(default=None, ge=0, le=2000)
+    pos_x: int | None = None
+    pos_y: int | None = None
 
 
 class SkillAdminUpdate(BaseModel):
     slug: Slug | None = None
     title: ShortText | None = None
+    subtitle: Annotated[str, StringConstraints(max_length=200)] | None = None
     description: Description | None = None
     category: Annotated[str, StringConstraints(max_length=100)] | None = None
     difficulty: int | None = Field(default=None, ge=1, le=5)
     layer: int | None = Field(default=None, ge=0, le=20)
     estimated_hours: int | None = Field(default=None, ge=0, le=2000)
+    pos_x: int | None = None
+    pos_y: int | None = None
 
 
 class SkillAdminRead(BaseModel):
@@ -128,11 +139,14 @@ class SkillAdminRead(BaseModel):
     id: uuid.UUID
     slug: str
     title: str
+    subtitle: str = ""
     description: str
     category: str
     difficulty: int
     layer: int
     estimated_hours: int | None = None
+    pos_x: int | None = None
+    pos_y: int | None = None
     professions: list[str] = Field(default_factory=list)
 
 
@@ -222,3 +236,98 @@ class ResourceAdminList(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# --------------------------------------------------------------------------
+# Редактор графа: сводный payload профессии
+# --------------------------------------------------------------------------
+
+
+class GraphNodeRead(BaseModel):
+    """Узел карты в редакторе: навык + позиция + состояние публикации."""
+
+    id: uuid.UUID
+    slug: str
+    title: str
+    subtitle: str = ""
+    description: str = ""
+    category: str = ""
+    difficulty: int = 1
+    layer: int = 0
+    estimated_hours: int | None = None
+    position: int = 0
+    is_core: bool = False
+    pos_x: int | None = None
+    pos_y: int | None = None
+    publish_state: Literal["draft", "published", "modified", "new"] = "draft"
+    resources_count: int = 0
+
+
+class GraphEdgeRead(BaseModel):
+    id: uuid.UUID
+    skill_id: uuid.UUID
+    prerequisite_id: uuid.UUID
+    dep_type: DependencyType
+
+
+class GraphStats(BaseModel):
+    skills: int = 0
+    required: int = 0
+    recommended: int = 0
+    layers: int = 0
+    resources: int = 0
+    modified: int = 0
+
+
+class ProfessionGraphRead(BaseModel):
+    profession_id: uuid.UUID
+    slug: str
+    title: str
+    status: ProfessionStatus
+    skills_ready: bool
+    content_version: int = 1
+    published_at: datetime | None = None
+    published_by_name: str = ""
+    updated_at: datetime | None = None
+    has_unpublished_changes: bool = False
+    nodes: list[GraphNodeRead] = Field(default_factory=list)
+    edges: list[GraphEdgeRead] = Field(default_factory=list)
+    stats: GraphStats = Field(default_factory=GraphStats)
+
+
+class GraphSkillCreate(BaseModel):
+    """Новый навык прямо из редактора: сразу привязывается к профессии."""
+
+    slug: Slug
+    title: ShortText
+    subtitle: Annotated[str, StringConstraints(max_length=200)] = ""
+    description: Description = ""
+    category: Annotated[str, StringConstraints(max_length=100)] = ""
+    difficulty: int = Field(default=1, ge=1, le=5)
+    estimated_hours: int | None = Field(default=None, ge=0, le=2000)
+    pos_x: int | None = None
+    pos_y: int | None = None
+    is_core: bool = False
+
+
+class GraphPositionUpdate(BaseModel):
+    """Сохранение координат узла после drag&drop (или сброс в null)."""
+
+    pos_x: int | None = None
+    pos_y: int | None = None
+
+
+class PublishRead(BaseModel):
+    profession_id: uuid.UUID
+    status: ProfessionStatus
+    content_version: int
+    published_at: datetime | None = None
+    published_by_name: str = ""
+
+
+class ProfessionPreviewRead(BaseModel):
+    status: ProfessionStatus
+    content_version: int
+    published_at: datetime | None = None
+    map: ProfessionMapResponse
+

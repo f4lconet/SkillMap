@@ -11,19 +11,24 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import DbSession, require_role
+from app.api.deps import CurrentUser, DbSession, require_role
 from app.models import ProfessionStatus, UserRole
 from app.schemas.admin import (
     DependencyCreate,
     DependencyList,
     DependencyRead,
     DependencyUpdate,
+    GraphPositionUpdate,
+    GraphSkillCreate,
     ProfessionAdminCreate,
     ProfessionAdminList,
     ProfessionAdminRead,
     ProfessionAdminUpdate,
+    ProfessionGraphRead,
+    ProfessionPreviewRead,
     ProfessionSkillLinkRead,
     ProfessionSkillsReplace,
+    PublishRead,
     ResourceAdminCreate,
     ResourceAdminList,
     ResourceAdminRead,
@@ -35,6 +40,7 @@ from app.schemas.admin import (
 )
 from app.schemas.auth import MessageResponse
 from app.services import admin as admin_service
+from app.services import skills as skills_service
 from app.services.graph import ensure_graph_has_no_cycles
 
 router = APIRouter(
@@ -67,11 +73,14 @@ async def _skill_read(db: AsyncSession, skill_id: uuid.UUID) -> SkillAdminRead:
         id=skill.id,
         slug=skill.slug,
         title=skill.title,
+        subtitle=skill.subtitle or "",
         description=skill.description or "",
         category=skill.category or "",
         difficulty=skill.difficulty or 1,
         layer=skill.layer or 0,
         estimated_hours=skill.estimated_hours,
+        pos_x=skill.pos_x,
+        pos_y=skill.pos_y,
         professions=professions.get(skill.id, []),
     )
 
@@ -156,6 +165,70 @@ async def replace_profession_skills(
     return await _profession_skills(db, profession_id)
 
 
+# ---------------------------- Редактор графа -------------------------------
+
+
+@router.get(
+    "/professions/{profession_id}/graph",
+    response_model=ProfessionGraphRead,
+    summary="Сводный граф профессии для редактора",
+)
+async def get_profession_graph(profession_id: uuid.UUID, db: DbSession):
+    return await admin_service.get_profession_graph(db, profession_id)
+
+
+@router.post(
+    "/professions/{profession_id}/skills",
+    response_model=SkillAdminRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Создать навык и сразу добавить его в профессию",
+)
+async def create_profession_skill(
+    profession_id: uuid.UUID, data: GraphSkillCreate, db: DbSession
+):
+    skill = await admin_service.upsert_graph_skill(db, profession_id, data)
+    return await _skill_read(db, skill.id)
+
+
+@router.post(
+    "/professions/{profession_id}/publish",
+    response_model=PublishRead,
+    summary="Опубликовать граф профессии (с проверкой циклов)",
+)
+async def publish_profession(
+    profession_id: uuid.UUID, db: DbSession, user: CurrentUser
+):
+    return await admin_service.publish_profession(db, profession_id, user)
+
+
+@router.get(
+    "/professions/{profession_id}/preview",
+    response_model=ProfessionPreviewRead,
+    summary="Предпросмотр карты глазами студента (включая черновики)",
+)
+async def preview_profession(profession_id: uuid.UUID, db: DbSession):
+    profession = await admin_service.get_profession(db, profession_id)
+    payload = await skills_service.get_profession_map(
+        db, profession_id, allow_draft=True
+    )
+    return ProfessionPreviewRead(
+        status=profession.status,
+        content_version=profession.content_version or 1,
+        published_at=profession.published_at,
+        map=payload,
+    )
+
+
+@router.put(
+    "/professions/{profession_id}/layout",
+    response_model=MessageResponse,
+    summary="Сбросить ручные координаты всех узлов профессии",
+)
+async def reset_profession_layout(profession_id: uuid.UUID, db: DbSession):
+    count = await admin_service.reset_profession_layout(db, profession_id)
+    return MessageResponse(detail=f"Раскладка сброшена для {count} навыков")
+
+
 # -------------------------------- Навыки -----------------------------------
 
 
@@ -177,11 +250,14 @@ async def list_skills(
                 id=s.id,
                 slug=s.slug,
                 title=s.title,
+                subtitle=s.subtitle or "",
                 description=s.description or "",
                 category=s.category or "",
                 difficulty=s.difficulty or 1,
                 layer=s.layer or 0,
                 estimated_hours=s.estimated_hours,
+                pos_x=s.pos_x,
+                pos_y=s.pos_y,
                 professions=professions.get(s.id, []),
             )
             for s in items
@@ -217,6 +293,15 @@ async def delete_skill(skill_id: uuid.UUID, db: DbSession):
     return MessageResponse(detail="Навык удалён")
 
 
+@router.patch("/skills/{skill_id}/position", response_model=SkillAdminRead)
+async def update_skill_position(
+    skill_id: uuid.UUID, data: GraphPositionUpdate, db: DbSession
+):
+    """Сохраняет координаты узла после drag&drop (null — вернуть авто-раскладку)."""
+    await admin_service.update_skill_position(db, skill_id, data)
+    return await _skill_read(db, skill_id)
+
+
 # -------------------------------- Связи ------------------------------------
 
 
@@ -224,11 +309,12 @@ async def delete_skill(skill_id: uuid.UUID, db: DbSession):
 async def list_dependencies(
     db: DbSession,
     skill_id: Annotated[uuid.UUID | None, Query()] = None,
+    related_to: Annotated[uuid.UUID | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ):
     items, total = await admin_service.list_dependencies(
-        db, skill_id=skill_id, limit=limit, offset=offset
+        db, skill_id=skill_id, related_to=related_to, limit=limit, offset=offset
     )
     return DependencyList(items=items, total=total, limit=limit, offset=offset)
 

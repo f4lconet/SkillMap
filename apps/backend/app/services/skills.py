@@ -242,6 +242,7 @@ def _to_node(
         id=skill.id,
         slug=skill.slug,
         title=skill.title,
+        subtitle=skill.subtitle or "",
         description=skill.description or "",
         category=skill.category or "",
         difficulty=skill.difficulty or 1,
@@ -249,6 +250,8 @@ def _to_node(
         estimated_hours=skill.estimated_hours,
         position=ps.position,
         is_core=ps.is_core,
+        pos_x=skill.pos_x,
+        pos_y=skill.pos_y,
         required_prerequisites=required,
         recommended_prerequisites=recommended,
         user_status=SkillStatus(user_status) if user_status else None,
@@ -262,8 +265,15 @@ async def get_profession_map(
     db: AsyncSession,
     profession_id: uuid.UUID,
     user: User | None = None,
+    *,
+    allow_draft: bool = False,
 ) -> ProfessionMapResponse:
-    profession = await get_profession_or_404(db, profession_id)
+    if allow_draft:
+        profession = await db.get(Profession, profession_id)
+        if profession is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Профессия не найдена")
+    else:
+        profession = await get_profession_or_404(db, profession_id)
 
     links = list(
         await db.scalars(

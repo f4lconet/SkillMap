@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
@@ -14,23 +15,33 @@ from app.models import (
     Direction,
     Profession,
     ProfessionSkill,
+    ProfessionStatus,
     Resource,
     Skill,
     SkillDependency,
+    User,
 )
+from app.models.base import utcnow
 from app.schemas.admin import (
     DependencyCreate,
     DependencyRead,
     DependencyUpdate,
+    GraphEdgeRead,
+    GraphNodeRead,
+    GraphPositionUpdate,
+    GraphSkillCreate,
+    GraphStats,
     ProfessionAdminCreate,
     ProfessionAdminUpdate,
+    ProfessionGraphRead,
     ProfessionSkillLinkIn,
+    PublishRead,
     ResourceAdminCreate,
     ResourceAdminUpdate,
     SkillAdminCreate,
     SkillAdminUpdate,
 )
-from app.services.graph import ensure_edge_is_safe
+from app.services.graph import ensure_edge_is_safe, ensure_graph_has_no_cycles
 
 NOT_FOUND_SKILL = "Навык не найден"
 NOT_FOUND_PROFESSION = "Профессия не найдена"
@@ -279,6 +290,10 @@ async def update_skill(
 ) -> Skill:
     skill = await get_skill(db, skill_id)
     changes = data.model_dump(exclude_unset=True, exclude_none=True)
+    # Координаты можно сбросить явным null — тогда работает авто-раскладка
+    for field in ("pos_x", "pos_y"):
+        if field in data.model_fields_set:
+            changes[field] = getattr(data, field)
     if "slug" in changes:
         await _ensure_skill_slug_free(db, changes["slug"], skill_id)
     for field, value in changes.items():
@@ -334,12 +349,20 @@ async def list_dependencies(
     db: AsyncSession,
     *,
     skill_id: uuid.UUID | None,
+    related_to: uuid.UUID | None = None,
     limit: int,
     offset: int,
 ) -> tuple[list[DependencyRead], int]:
     stmt = select(SkillDependency)
     if skill_id:
         stmt = stmt.where(SkillDependency.skill_id == skill_id)
+    if related_to:
+        stmt = stmt.where(
+            or_(
+                SkillDependency.skill_id == related_to,
+                SkillDependency.prerequisite_id == related_to,
+            )
+        )
     total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
     rows = list(
         await db.scalars(
@@ -497,3 +520,228 @@ async def delete_resource(db: AsyncSession, resource_id: uuid.UUID) -> None:
     resource = await get_resource(db, resource_id)
     await db.delete(resource)
     await db.commit()
+
+
+# --------------------------------------------------------------------------
+# Редактор графа профессии
+# --------------------------------------------------------------------------
+
+
+def _aware(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _publish_state(skill: Skill, profession: Profession) -> str:
+    """Статус узла относительно последней публикации профессии."""
+    published_at = _aware(profession.published_at)
+    if profession.status != ProfessionStatus.PUBLISHED or published_at is None:
+        return "draft"
+    created_at = _aware(skill.created_at)
+    updated_at = _aware(skill.updated_at)
+    if created_at is not None and created_at > published_at:
+        return "new"
+    if updated_at is not None and updated_at > published_at:
+        return "modified"
+    return "published"
+
+
+async def _user_name(db: AsyncSession, user_id: uuid.UUID | None) -> str:
+    if user_id is None:
+        return ""
+    name = await db.scalar(select(User.name).where(User.id == user_id))
+    return name or ""
+
+
+async def _profession_skill_ids(
+    db: AsyncSession, profession_id: uuid.UUID
+) -> list[uuid.UUID]:
+    return list(
+        await db.scalars(
+            select(ProfessionSkill.skill_id)
+            .where(ProfessionSkill.profession_id == profession_id)
+            .order_by(ProfessionSkill.position)
+        )
+    )
+
+
+async def get_profession_graph(
+    db: AsyncSession, profession_id: uuid.UUID
+) -> ProfessionGraphRead:
+    """Сводный payload для редактора: узлы, связи, статистика, публикация."""
+    profession = await get_profession(db, profession_id)
+    links = list(
+        await db.scalars(
+            select(ProfessionSkill)
+            .where(ProfessionSkill.profession_id == profession_id)
+            .options(selectinload(ProfessionSkill.skill))
+            .order_by(ProfessionSkill.position)
+        )
+    )
+    skill_ids = [ps.skill_id for ps in links]
+
+    edges: list[SkillDependency] = []
+    res_counts: dict[uuid.UUID, int] = {}
+    if skill_ids:
+        edges = list(
+            await db.scalars(
+                select(SkillDependency)
+                .where(
+                    SkillDependency.skill_id.in_(skill_ids),
+                    SkillDependency.prerequisite_id.in_(skill_ids),
+                )
+                .order_by(SkillDependency.created_at)
+            )
+        )
+        rows = await db.execute(
+            select(Resource.skill_id, func.count())
+            .where(Resource.skill_id.in_(skill_ids))
+            .group_by(Resource.skill_id)
+        )
+        res_counts = {skill_id: count for skill_id, count in rows}
+
+    nodes: list[GraphNodeRead] = []
+    modified = 0
+    for ps in links:
+        skill = ps.skill
+        state = _publish_state(skill, profession)
+        if state in {"modified", "new"}:
+            modified += 1
+        nodes.append(
+            GraphNodeRead(
+                id=skill.id,
+                slug=skill.slug,
+                title=skill.title,
+                subtitle=skill.subtitle or "",
+                description=skill.description or "",
+                category=skill.category or "",
+                difficulty=skill.difficulty or 1,
+                layer=skill.layer or 0,
+                estimated_hours=skill.estimated_hours,
+                position=ps.position,
+                is_core=ps.is_core,
+                pos_x=skill.pos_x,
+                pos_y=skill.pos_y,
+                publish_state=state,
+                resources_count=res_counts.get(skill.id, 0),
+            )
+        )
+
+    required = sum(
+        1 for edge in edges if edge.dep_type == DependencyType.REQUIRED
+    )
+    return ProfessionGraphRead(
+        profession_id=profession.id,
+        slug=profession.slug,
+        title=profession.title,
+        status=profession.status,
+        skills_ready=profession.skills_ready,
+        content_version=profession.content_version or 1,
+        published_at=profession.published_at,
+        published_by_name=await _user_name(db, profession.published_by_id),
+        updated_at=profession.updated_at,
+        has_unpublished_changes=modified > 0
+        or profession.status != ProfessionStatus.PUBLISHED,
+        nodes=nodes,
+        edges=[
+            GraphEdgeRead(
+                id=edge.id,
+                skill_id=edge.skill_id,
+                prerequisite_id=edge.prerequisite_id,
+                dep_type=edge.dep_type,
+            )
+            for edge in edges
+        ],
+        stats=GraphStats(
+            skills=len(nodes),
+            required=required,
+            recommended=len(edges) - required,
+            layers=len({node.layer for node in nodes}),
+            resources=sum(res_counts.values()),
+            modified=modified,
+        ),
+    )
+
+
+async def publish_profession(
+    db: AsyncSession, profession_id: uuid.UUID, user: User
+) -> PublishRead:
+    """Публикация: проверяем граф на циклы и отдаём новую версию студентам."""
+    profession = await get_profession(db, profession_id)
+    skill_ids = await _profession_skill_ids(db, profession_id)
+    if not skill_ids:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Нельзя опубликовать профессию без навыков",
+        )
+    await ensure_graph_has_no_cycles(db)
+
+    profession.status = ProfessionStatus.PUBLISHED
+    profession.skills_ready = True
+    profession.skills_count = len(skill_ids)
+    profession.published_at = utcnow()
+    profession.published_by_id = user.id
+    profession.content_version = (profession.content_version or 0) + 1
+    await db.commit()
+    await db.refresh(profession)
+    return PublishRead(
+        profession_id=profession.id,
+        status=profession.status,
+        content_version=profession.content_version,
+        published_at=profession.published_at,
+        published_by_name=user.name,
+    )
+
+
+async def upsert_graph_skill(
+    db: AsyncSession, profession_id: uuid.UUID, data: GraphSkillCreate
+) -> Skill:
+    """Создаёт навык и сразу ставит его в конец списка навыков профессии."""
+    profession = await get_profession(db, profession_id)
+    positions = list(
+        await db.scalars(
+            select(ProfessionSkill.position).where(
+                ProfessionSkill.profession_id == profession_id
+            )
+        )
+    )
+    skill = await create_skill(db, SkillAdminCreate(**data.model_dump(exclude={"is_core"})))
+    db.add(
+        ProfessionSkill(
+            profession_id=profession_id,
+            skill_id=skill.id,
+            position=(max(positions) + 1) if positions else 0,
+            is_core=data.is_core,
+        )
+    )
+    profession.skills_count = len(positions) + 1
+    await db.commit()
+    await db.refresh(skill)
+    return skill
+
+
+async def update_skill_position(
+    db: AsyncSession, skill_id: uuid.UUID, data: GraphPositionUpdate
+) -> Skill:
+    skill = await get_skill(db, skill_id)
+    skill.pos_x = data.pos_x
+    skill.pos_y = data.pos_y
+    await db.commit()
+    await db.refresh(skill)
+    return skill
+
+
+async def reset_profession_layout(
+    db: AsyncSession, profession_id: uuid.UUID
+) -> int:
+    """Сбрасывает координаты всех узлов профессии — карта снова авто-раскладка."""
+    skill_ids = await _profession_skill_ids(db, profession_id)
+    if not skill_ids:
+        return 0
+    skills = list(await db.scalars(select(Skill).where(Skill.id.in_(skill_ids))))
+    for skill in skills:
+        skill.pos_x = None
+        skill.pos_y = None
+    await db.commit()
+    return len(skills)

@@ -17,6 +17,7 @@ class Skill(Base, IdMixin, TimestampMixin):
 
     slug: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     title: Mapped[str] = mapped_column(String(200))
+    subtitle: Mapped[str] = mapped_column(String(200), default="")
     description: Mapped[str] = mapped_column(Text, default="")
     category: Mapped[str] = mapped_column(String(100), default="", index=True)
     # Сложность 1–5 (как в контенте аналитика)
@@ -24,6 +25,9 @@ class Skill(Base, IdMixin, TimestampMixin):
     # Глубина в графе по обязательным связям (0 = входной)
     layer: Mapped[int] = mapped_column(Integer, default=0)
     estimated_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Ручная позиция узла в редакторе графа (NULL = раскладка по layer/position)
+    pos_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pos_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     profession_links: Mapped[list[ProfessionSkill]] = relationship(
         back_populates="skill", cascade="all, delete-orphan"

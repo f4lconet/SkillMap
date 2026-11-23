@@ -10,7 +10,7 @@ import {
   useSkillMapData,
   type SkillFilter,
 } from '@/features/skill-map';
-import { USER_LEVEL_LABELS, USER_ROLE_LABELS } from '@/entities/user';
+import { USER_LEVEL_LABELS } from '@/entities/user';
 import { useShareState } from '@/entities/public-profile';
 import { cn } from '@/shared/lib/cn';
 
@@ -85,7 +85,7 @@ export function SkillMapPage() {
     <AppShell
       breadcrumb={['Моё обучение', 'Карта']}
       userName={user?.name}
-      userRole={user ? USER_ROLE_LABELS[user.role] : undefined}
+      userRole={user?.role}
       goalTitle={user?.targetProfession?.title}
       goalProgress={percent}
       userLevel={levelLabel ?? undefined}

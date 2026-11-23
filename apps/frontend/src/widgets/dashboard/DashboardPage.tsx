@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { AppShell } from '@/widgets/app-shell';
 import { useDashboardData } from '@/features/dashboard';
-import { USER_LEVEL_LABELS, USER_ROLE_LABELS, type UserLevel } from '@/entities/user';
+import { USER_LEVEL_LABELS, type UserLevel } from '@/entities/user';
 import { ROUTES } from '@/shared/config';
 import { Button } from '@/shared/ui';
 import { DashboardGreeting } from './dashboard-greeting';
@@ -28,7 +28,7 @@ export function DashboardPage() {
   const shellProps = {
     breadcrumb: ['Моё обучение', 'Дашборд'],
     userName: user?.name,
-    userRole: user ? USER_ROLE_LABELS[user.role] : undefined,
+    userRole: user?.role,
     goalTitle: kpi?.targetProfessionTitle ?? undefined,
     goalProgress: kpi ? Math.round(kpi.progressPercent) : 0,
     userLevel: levelLabelOf(kpi?.level),

@@ -630,3 +630,132 @@ async def test_export_requires_target(client: AsyncClient, session_factory):
 
     r = await client.get("/api/v1/me/export", headers=headers)
     assert r.status_code == 409, r.text
+
+
+# ---------------------------- Редактор графа -------------------------------
+
+
+@pytest.mark.asyncio
+async def test_admin_graph_editor_flow(client: AsyncClient, editor_headers):
+    r = await client.post(
+        "/api/v1/admin/professions",
+        json={"slug": "zz-graph-draft", "title": "Черновик графа", "status": "draft"},
+        headers=editor_headers,
+    )
+    assert r.status_code == 201, r.text
+    pid = r.json()["id"]
+    graph_url = f"/api/v1/admin/professions/{pid}/graph"
+
+    graph = (await client.get(graph_url, headers=editor_headers)).json()
+    assert graph["nodes"] == [] and graph["edges"] == []
+    assert graph["status"] == "draft"
+    assert graph["has_unpublished_changes"] is True
+    assert graph["stats"]["skills"] == 0
+
+    # публикация без навыков невозможна
+    r = await client.post(
+        f"/api/v1/admin/professions/{pid}/publish", headers=editor_headers
+    )
+    assert r.status_code == 422, r.text
+
+    # новый узел создаётся сразу в графе профессии
+    skill_ids = []
+    for slug, title in (("zz-graph-one", "Узел один"), ("zz-graph-two", "Узел два")):
+        r = await client.post(
+            f"/api/v1/admin/professions/{pid}/skills",
+            json={
+                "slug": slug,
+                "title": title,
+                "subtitle": "Подзаголовок",
+                "difficulty": 3,
+                "estimated_hours": 6,
+                "pos_x": 10,
+                "pos_y": 20,
+            },
+            headers=editor_headers,
+        )
+        assert r.status_code == 201, r.text
+        skill_ids.append(r.json()["id"])
+
+    r = await client.patch(
+        f"/api/v1/admin/skills/{skill_ids[0]}/position",
+        json={"pos_x": 320, "pos_y": -80},
+        headers=editor_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert (r.json()["pos_x"], r.json()["pos_y"]) == (320, -80)
+
+    r = await client.post(
+        "/api/v1/admin/dependencies",
+        json={
+            "skill_id": skill_ids[1],
+            "prerequisite_id": skill_ids[0],
+            "dep_type": "required",
+        },
+        headers=editor_headers,
+    )
+    assert r.status_code == 201, r.text
+    dep_id = r.json()["id"]
+
+    for related in (skill_ids[0], skill_ids[1]):
+        r = await client.get(
+            "/api/v1/admin/dependencies",
+            params={"related_to": related},
+            headers=editor_headers,
+        )
+        assert r.status_code == 200, r.text
+        assert [item["id"] for item in r.json()["items"]] == [dep_id]
+
+    graph = (await client.get(graph_url, headers=editor_headers)).json()
+    assert graph["stats"]["skills"] == 2
+    assert graph["stats"]["required"] == 1
+    assert graph["stats"]["layers"] == 1
+    node = next(n for n in graph["nodes"] if n["id"] == skill_ids[0])
+    assert node["pos_x"] == 320
+    assert node["subtitle"] == "Подзаголовок"
+    assert node["publish_state"] == "draft"
+
+    # предпросмотр черновика доступен редактору
+    r = await client.get(
+        f"/api/v1/admin/professions/{pid}/preview", headers=editor_headers
+    )
+    assert r.status_code == 200, r.text
+    preview = r.json()
+    assert preview["status"] == "draft"
+    assert len(preview["map"]["skills"]) == 2
+    assert preview["map"]["skills"][0]["subtitle"] == "Подзаголовок"
+
+    r = await client.post(
+        f"/api/v1/admin/professions/{pid}/publish", headers=editor_headers
+    )
+    assert r.status_code == 200, r.text
+    published = r.json()
+    assert published["status"] == "published"
+    assert published["content_version"] == 2
+    assert published["published_by_name"]
+
+    graph = (await client.get(graph_url, headers=editor_headers)).json()
+    assert graph["has_unpublished_changes"] is False
+    assert {n["publish_state"] for n in graph["nodes"]} == {"published"}
+
+    # правка после публикации помечает узел как изменённый
+    r = await client.patch(
+        f"/api/v1/admin/skills/{skill_ids[0]}",
+        json={"title": "Узел один v2"},
+        headers=editor_headers,
+    )
+    assert r.status_code == 200, r.text
+    graph = (await client.get(graph_url, headers=editor_headers)).json()
+    states = {n["id"]: n["publish_state"] for n in graph["nodes"]}
+    assert states[skill_ids[0]] == "modified"
+    assert states[skill_ids[1]] == "published"
+    assert graph["has_unpublished_changes"] is True
+
+    r = await client.put(
+        f"/api/v1/admin/professions/{pid}/layout", headers=editor_headers
+    )
+    assert r.status_code == 200, r.text
+    graph = (await client.get(graph_url, headers=editor_headers)).json()
+    assert all(n["pos_x"] is None and n["pos_y"] is None for n in graph["nodes"])
+
+    await client.delete(f"/api/v1/admin/professions/{pid}", headers=editor_headers)

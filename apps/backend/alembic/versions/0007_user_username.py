@@ -1,4 +1,4 @@
-"""week5: человекочитаемый username для публичной карты (/u/{username})
+"""week4: человекочитаемый username для публичной карты (/u/{username})
 
 Revision ID: 0007
 Revises: 0006

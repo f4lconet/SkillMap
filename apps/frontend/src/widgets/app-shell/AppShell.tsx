@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import type { UserRole } from '@/entities/user';
 import { AppSidebar } from './AppSidebar';
 
 type Props = {
@@ -8,7 +9,7 @@ type Props = {
   breadcrumb?: string[];
   savedHint?: string;
   userName?: string;
-  userRole?: string;
+  userRole?: UserRole;
   goalTitle?: string;
   goalProgress?: number;
   userLevel?: string;

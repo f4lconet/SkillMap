@@ -38,4 +38,6 @@ class User(Base, IdMixin, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
 
-    target_profession: Mapped[Profession | None] = relationship(lazy="joined")
+    target_profession: Mapped[Profession | None] = relationship(
+        lazy="joined", foreign_keys=[target_profession_id]
+    )

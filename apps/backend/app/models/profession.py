@@ -1,4 +1,9 @@
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -31,6 +36,14 @@ class Profession(Base, IdMixin, TimestampMixin):
     estimated_weeks: Mapped[int] = mapped_column(Integer, default=0)
     # true только если граф навыков готов (data-scientist, fullstack, ux-ui)
     skills_ready: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Последняя публикация: когда, кем и под каким номером версии ушла студентам
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    published_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    content_version: Mapped[int] = mapped_column(Integer, default=1)
 
     skill_links: Mapped[list["ProfessionSkill"]] = relationship(  # noqa: F821
         "ProfessionSkill",

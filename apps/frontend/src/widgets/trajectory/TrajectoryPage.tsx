@@ -57,6 +57,7 @@ export function TrajectoryPage() {
   const shellProps = {
     breadcrumb: ['Моё обучение', 'Траектория'],
     userName: user?.name,
+    userRole: user?.role,
     goalTitle: trajectory?.professionTitle ?? user?.targetProfession?.title,
     goalProgress,
     userLevel: levelLabel ?? undefined,

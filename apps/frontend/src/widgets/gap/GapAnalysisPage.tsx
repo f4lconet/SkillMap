@@ -72,6 +72,7 @@ export function GapAnalysisPage() {
   const shellProps = {
     breadcrumb: ['Моё обучение', 'Gap Analysis'],
     userName: user?.name,
+    userRole: user?.role,
     goalTitle: view?.professionTitle ?? user?.targetProfession?.title,
     goalProgress: view?.percent ?? 0,
     userLevel: levelLabel ?? undefined,

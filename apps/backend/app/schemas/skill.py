@@ -50,6 +50,7 @@ class ProfessionSkillNode(BaseModel):
     id: uuid.UUID
     slug: str
     title: str
+    subtitle: str = ""
     description: str = ""
     category: str = ""
     difficulty: int = 1
@@ -57,6 +58,8 @@ class ProfessionSkillNode(BaseModel):
     estimated_hours: int | None = None
     position: int = 0
     is_core: bool = True
+    pos_x: int | None = None
+    pos_y: int | None = None
     required_prerequisites: list[PrerequisiteRef] = Field(default_factory=list)
     recommended_prerequisites: list[PrerequisiteRef] = Field(default_factory=list)
     user_status: SkillStatus | None = None
