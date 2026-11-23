@@ -1,0 +1,1 @@
+export { ResourcesEditorPage } from './ResourcesEditorPage';

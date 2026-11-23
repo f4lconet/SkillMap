@@ -20,8 +20,16 @@ Slug = Annotated[
     ),
 ]
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)]
+# Названия ресурсов из контента аналитика бывают длиннее ShortText
+ResourceTitle = Annotated[
+    str, StringConstraints(strip_whitespace=True, max_length=500)
+]
 Description = Annotated[str, StringConstraints(max_length=4000)]
 ResourceType = Literal["course", "book", "project", "article", "video", "docs"]
+ResourceStatus = Literal["draft", "published", "needs_review"]
+ResourceLinkStatus = Literal["unknown", "ok", "broken"]
+ResourceSortField = Literal["skill", "title", "status", "updated"]
+SortDirection = Literal["asc", "desc"]
 
 
 class ProfessionAdminCreate(BaseModel):
@@ -191,7 +199,7 @@ class DependencyList(BaseModel):
 
 class ResourceAdminCreate(BaseModel):
     skill_id: uuid.UUID
-    title: ShortText
+    title: ResourceTitle
     url: Annotated[str, StringConstraints(max_length=1000)] = ""
     resource_type: ResourceType = "course"
     is_free: bool = True
@@ -200,11 +208,12 @@ class ResourceAdminCreate(BaseModel):
     description: Description = ""
     estimated_hours: int | None = Field(default=None, ge=0, le=2000)
     position: int = Field(default=0, ge=0)
+    status: ResourceStatus = "draft"
 
 
 class ResourceAdminUpdate(BaseModel):
     skill_id: uuid.UUID | None = None
-    title: ShortText | None = None
+    title: ResourceTitle | None = None
     url: Annotated[str, StringConstraints(max_length=1000)] | None = None
     resource_type: ResourceType | None = None
     is_free: bool | None = None
@@ -213,6 +222,7 @@ class ResourceAdminUpdate(BaseModel):
     description: Description | None = None
     estimated_hours: int | None = Field(default=None, ge=0, le=2000)
     position: int | None = Field(default=None, ge=0)
+    status: ResourceStatus | None = None
 
 
 class ResourceAdminRead(BaseModel):
@@ -220,6 +230,8 @@ class ResourceAdminRead(BaseModel):
 
     id: uuid.UUID
     skill_id: uuid.UUID
+    skill_slug: str = ""
+    skill_title: str = ""
     title: str
     url: str
     resource_type: str
@@ -229,6 +241,10 @@ class ResourceAdminRead(BaseModel):
     description: str
     estimated_hours: int | None = None
     position: int
+    status: ResourceStatus = "draft"
+    link_status: ResourceLinkStatus = "unknown"
+    last_checked_at: datetime | None = None
+    published_at: datetime | None = None
 
 
 class ResourceAdminList(BaseModel):
@@ -236,6 +252,27 @@ class ResourceAdminList(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class ResourceStats(BaseModel):
+    """Сводка по ресурсам для карточек на странице «Ресурсы»."""
+
+    total: int = 0
+    published: int = 0
+    draft: int = 0
+    needs_review: int = 0
+    broken_links: int = 0
+    unchecked_links: int = 0
+    skills_total: int = 0
+    skills_with_resources: int = 0
+    profession_id: uuid.UUID | None = None
+
+
+class ResourceLinkCheckResult(BaseModel):
+    checked: int = 0
+    ok: int = 0
+    broken: int = 0
+    items: list[ResourceAdminRead] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------

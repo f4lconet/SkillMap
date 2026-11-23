@@ -1,12 +1,15 @@
 """Админка: CRUD профессий, навыков, связей и ресурсов — неделя 4."""
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from urllib.parse import urlparse
 
+import httpx
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, distinct, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -37,7 +40,9 @@ from app.schemas.admin import (
     ProfessionSkillLinkIn,
     PublishRead,
     ResourceAdminCreate,
+    ResourceAdminRead,
     ResourceAdminUpdate,
+    ResourceStats,
     SkillAdminCreate,
     SkillAdminUpdate,
 )
@@ -464,6 +469,16 @@ async def delete_dependency(
 # Ресурсы
 # --------------------------------------------------------------------------
 
+RESOURCE_SORT_COLUMNS = {
+    "skill": Skill.title,
+    "title": Resource.title,
+    "status": Resource.status,
+    "updated": Resource.updated_at,
+}
+
+# Таймаут проверки ссылки: админка ждёт ответа не дольше 5 секунд
+LINK_CHECK_TIMEOUT = 5.0
+
 
 async def get_resource(db: AsyncSession, resource_id: uuid.UUID) -> Resource:
     resource = await db.get(Resource, resource_id)
@@ -472,30 +487,213 @@ async def get_resource(db: AsyncSession, resource_id: uuid.UUID) -> Resource:
     return resource
 
 
+def to_resource_read(
+    resource: Resource, skill_slug: str = "", skill_title: str = ""
+) -> ResourceAdminRead:
+    return ResourceAdminRead(
+        id=resource.id,
+        skill_id=resource.skill_id,
+        skill_slug=skill_slug,
+        skill_title=skill_title,
+        title=resource.title,
+        url=resource.url or "",
+        resource_type=resource.resource_type or "course",
+        is_free=bool(resource.is_free),
+        provider=resource.provider or "",
+        lang=resource.lang or "ru",
+        description=resource.description or "",
+        estimated_hours=resource.estimated_hours,
+        position=resource.position or 0,
+        status=resource.status or "draft",
+        link_status=resource.link_status or "unknown",
+        last_checked_at=resource.last_checked_at,
+        published_at=resource.published_at,
+    )
+
+
+async def to_resource_reads(
+    db: AsyncSession, resources: Sequence[Resource]
+) -> list[ResourceAdminRead]:
+    """Читает ресурсы вместе с названиями навыков (для ответов админки)."""
+    if not resources:
+        return []
+    rows = await db.execute(
+        select(Skill.id, Skill.slug, Skill.title).where(
+            Skill.id.in_({r.skill_id for r in resources})
+        )
+    )
+    by_id = {skill_id: (slug, title) for skill_id, slug, title in rows}
+    result = []
+    for resource in resources:
+        slug, title = by_id.get(resource.skill_id, ("", ""))
+        result.append(to_resource_read(resource, slug, title))
+    return result
+
+
+async def get_resource_read(
+    db: AsyncSession, resource_id: uuid.UUID
+) -> ResourceAdminRead:
+    row = (
+        await db.execute(
+            select(Resource, Skill.slug, Skill.title)
+            .join(Skill, Skill.id == Resource.skill_id)
+            .where(Resource.id == resource_id)
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND_RESOURCE)
+    return to_resource_read(row[0], row[1], row[2])
+
+
+def _resource_conditions(
+    *,
+    q: str | None = None,
+    skill_id: uuid.UUID | None = None,
+    profession_id: uuid.UUID | None = None,
+    resource_type: str | None = None,
+    lang: str | None = None,
+    is_free: bool | None = None,
+    status_filter: str | None = None,
+) -> list:
+    conditions = []
+    if q and q.strip():
+        pattern = f"%{_escape_like(q.strip())}%"
+        conditions.append(
+            or_(
+                Resource.title.ilike(pattern, escape="\\"),
+                Resource.url.ilike(pattern, escape="\\"),
+            )
+        )
+    if skill_id:
+        conditions.append(Resource.skill_id == skill_id)
+    if profession_id:
+        conditions.append(
+            Resource.skill_id.in_(
+                select(ProfessionSkill.skill_id).where(
+                    ProfessionSkill.profession_id == profession_id
+                )
+            )
+        )
+    if resource_type:
+        conditions.append(Resource.resource_type == resource_type)
+    if lang:
+        conditions.append(Resource.lang == lang)
+    if is_free is not None:
+        conditions.append(Resource.is_free == is_free)
+    if status_filter:
+        conditions.append(Resource.status == status_filter)
+    return conditions
+
+
 async def list_resources(
     db: AsyncSession,
     *,
-    skill_id: uuid.UUID | None,
-    limit: int,
-    offset: int,
-) -> tuple[list[Resource], int]:
-    stmt = select(Resource)
-    if skill_id:
-        stmt = stmt.where(Resource.skill_id == skill_id)
-    total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
-    rows = await db.scalars(
-        stmt.order_by(Resource.skill_id, Resource.position)
+    q: str | None = None,
+    skill_id: uuid.UUID | None = None,
+    profession_id: uuid.UUID | None = None,
+    resource_type: str | None = None,
+    lang: str | None = None,
+    is_free: bool | None = None,
+    status_filter: str | None = None,
+    sort_by: str = "skill",
+    sort_dir: str = "asc",
+    limit: int = 200,
+    offset: int = 0,
+) -> tuple[list[ResourceAdminRead], int]:
+    if profession_id:
+        await get_profession(db, profession_id)
+    conditions = _resource_conditions(
+        q=q,
+        skill_id=skill_id,
+        profession_id=profession_id,
+        resource_type=resource_type,
+        lang=lang,
+        is_free=is_free,
+        status_filter=status_filter,
+    )
+    total = await db.scalar(select(func.count(Resource.id)).where(*conditions))
+    column = RESOURCE_SORT_COLUMNS.get(sort_by, Skill.title)
+    order = column.desc() if sort_dir == "desc" else column.asc()
+    rows = await db.execute(
+        select(Resource, Skill.slug, Skill.title)
+        .join(Skill, Skill.id == Resource.skill_id)
+        .where(*conditions)
+        .order_by(order, Resource.skill_id, Resource.position)
         .limit(limit)
         .offset(offset)
     )
-    return list(rows), total or 0
+    return [to_resource_read(r, slug, title) for r, slug, title in rows], total or 0
+
+
+async def get_resource_stats(
+    db: AsyncSession, *, profession_id: uuid.UUID | None = None
+) -> ResourceStats:
+    """Сводка для карточек страницы «Ресурсы» (опционально в рамках профессии)."""
+    if profession_id:
+        await get_profession(db, profession_id)
+    conditions = _resource_conditions(profession_id=profession_id)
+    total, published, draft, needs_review, broken, unchecked, covered = (
+        await db.execute(
+            select(
+                func.count(Resource.id),
+                func.coalesce(
+                    func.sum(case((Resource.status == "published", 1), else_=0)), 0
+                ),
+                func.coalesce(
+                    func.sum(case((Resource.status == "draft", 1), else_=0)), 0
+                ),
+                func.coalesce(
+                    func.sum(case((Resource.status == "needs_review", 1), else_=0)), 0
+                ),
+                func.coalesce(
+                    func.sum(case((Resource.link_status == "broken", 1), else_=0)), 0
+                ),
+                func.coalesce(
+                    func.sum(case((Resource.link_status == "unknown", 1), else_=0)), 0
+                ),
+                func.count(distinct(Resource.skill_id)),
+            ).where(*conditions)
+        )
+    ).one()
+
+    if profession_id:
+        skills_total = await db.scalar(
+            select(func.count())
+            .select_from(ProfessionSkill)
+            .where(ProfessionSkill.profession_id == profession_id)
+        )
+    else:
+        skills_total = await db.scalar(select(func.count()).select_from(Skill))
+
+    return ResourceStats(
+        total=total or 0,
+        published=published or 0,
+        draft=draft or 0,
+        needs_review=needs_review or 0,
+        broken_links=broken or 0,
+        unchecked_links=unchecked or 0,
+        skills_total=skills_total or 0,
+        skills_with_resources=covered or 0,
+        profession_id=profession_id,
+    )
+
+
+async def _touch_skill(db: AsyncSession, skill_id: uuid.UUID) -> None:
+    """Отметка изменения навыка: публикация профессии увидит правку ресурса."""
+    skill = await db.get(Skill, skill_id)
+    if skill is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND_SKILL)
+    skill.updated_at = utcnow()
 
 
 async def create_resource(
     db: AsyncSession, data: ResourceAdminCreate
 ) -> Resource:
-    await _ensure_skills_exist(db, [data.skill_id])
-    resource = Resource(**data.model_dump())
+    await _touch_skill(db, data.skill_id)
+    payload = data.model_dump()
+    if payload.get("status") == "published":
+        payload["published_at"] = utcnow()
+    resource = Resource(**payload)
     db.add(resource)
     await db.commit()
     await db.refresh(resource)
@@ -507,10 +705,31 @@ async def update_resource(
 ) -> Resource:
     resource = await get_resource(db, resource_id)
     changes = data.model_dump(exclude_unset=True, exclude_none=True)
+    # Часы можно сбросить явным null — ресурс без оценки времени
+    if "estimated_hours" in data.model_fields_set:
+        changes["estimated_hours"] = data.estimated_hours
+    previous_skill_id = resource.skill_id
     if "skill_id" in changes:
-        await _ensure_skills_exist(db, [changes["skill_id"]])
+        await _touch_skill(db, changes["skill_id"])
+    status = changes.get("status")
+    if status == "published" and resource.status != "published":
+        changes["published_at"] = utcnow()
+    elif status == "draft":
+        changes["published_at"] = None
     for field, value in changes.items():
         setattr(resource, field, value)
+    await _touch_skill(db, previous_skill_id)
+    await _touch_skill(db, resource.skill_id)
+    await db.commit()
+    await db.refresh(resource)
+    return resource
+
+
+async def publish_resource(db: AsyncSession, resource_id: uuid.UUID) -> Resource:
+    resource = await get_resource(db, resource_id)
+    resource.status = "published"
+    resource.published_at = utcnow()
+    await _touch_skill(db, resource.skill_id)
     await db.commit()
     await db.refresh(resource)
     return resource
@@ -518,8 +737,95 @@ async def update_resource(
 
 async def delete_resource(db: AsyncSession, resource_id: uuid.UUID) -> None:
     resource = await get_resource(db, resource_id)
+    skill_id = resource.skill_id
     await db.delete(resource)
+    await _touch_skill(db, skill_id)
     await db.commit()
+
+
+async def _probe_url(url: str) -> bool:
+    """Проверяет доступность ссылки: HEAD, при 4xx/405 — GET с Range."""
+    url = (url or "").strip()
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return False
+    headers = {"User-Agent": "SkillMap/1.0 (+link-check)"}
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(LINK_CHECK_TIMEOUT),
+            follow_redirects=True,
+        ) as client:
+            response = await client.head(url, headers=headers)
+            if response.status_code >= 400:
+                response = await client.get(
+                    url, headers={**headers, "Range": "bytes=0-0"}
+                )
+    except httpx.HTTPError:
+        return False
+    return response.status_code < 400
+
+
+def _apply_link_result(resource: Resource, ok: bool, checked_at: datetime) -> None:
+    resource.link_status = "ok" if ok else "broken"
+    resource.last_checked_at = checked_at
+    if not ok:
+        resource.status = "needs_review"
+    elif resource.status == "needs_review":
+        resource.status = "published" if resource.published_at else "draft"
+
+
+async def check_resource_link(
+    db: AsyncSession, resource_id: uuid.UUID
+) -> tuple[Resource, bool]:
+    resource = await get_resource(db, resource_id)
+    ok = await _probe_url(resource.url or "")
+    _apply_link_result(resource, ok, utcnow())
+    await _touch_skill(db, resource.skill_id)
+    await db.commit()
+    await db.refresh(resource)
+    return resource, ok
+
+
+async def check_resource_links(
+    db: AsyncSession,
+    *,
+    profession_id: uuid.UUID | None = None,
+    skill_id: uuid.UUID | None = None,
+    only_unchecked: bool = False,
+    limit: int = 50,
+) -> tuple[list[Resource], int]:
+    """Пакетная проверка ссылок. Возвращает ресурсы и число доступных."""
+    if profession_id:
+        await get_profession(db, profession_id)
+    conditions = _resource_conditions(
+        skill_id=skill_id, profession_id=profession_id
+    )
+    conditions.append(Resource.url != "")
+    if only_unchecked:
+        conditions.append(Resource.link_status == "unknown")
+    rows = list(
+        await db.scalars(
+            select(Resource)
+            .where(*conditions)
+            .order_by(Resource.updated_at.desc())
+            .limit(limit)
+        )
+    )
+    if not rows:
+        return [], 0
+
+    results = await asyncio.gather(*(_probe_url(r.url or "") for r in rows))
+    checked_at = utcnow()
+    ok_count = 0
+    for resource, ok in zip(rows, results, strict=True):
+        _apply_link_result(resource, ok, checked_at)
+        ok_count += int(ok)
+    for skill in {r.skill_id for r in rows}:
+        await _touch_skill(db, skill)
+    await db.commit()
+    for resource in rows:
+        await db.refresh(resource)
+    return rows, ok_count
 
 
 # --------------------------------------------------------------------------
@@ -676,6 +982,17 @@ async def publish_profession(
             "Нельзя опубликовать профессию без навыков",
         )
     await ensure_graph_has_no_cycles(db)
+
+    # Ресурсы публикуются вместе с профессией; сломанные ссылки остаются
+    # в статусе needs_review и не попадают к студентам
+    await db.execute(
+        update(Resource)
+        .where(
+            Resource.skill_id.in_(skill_ids),
+            Resource.status != "needs_review",
+        )
+        .values(status="published", published_at=utcnow())
+    )
 
     profession.status = ProfessionStatus.PUBLISHED
     profession.skills_ready = True

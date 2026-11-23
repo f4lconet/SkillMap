@@ -33,10 +33,16 @@ from app.schemas.admin import (
     ResourceAdminList,
     ResourceAdminRead,
     ResourceAdminUpdate,
+    ResourceLinkCheckResult,
+    ResourceSortField,
+    ResourceStats,
+    ResourceStatus,
+    ResourceType,
     SkillAdminCreate,
     SkillAdminList,
     SkillAdminRead,
     SkillAdminUpdate,
+    SortDirection,
 )
 from app.schemas.auth import MessageResponse
 from app.services import admin as admin_service
@@ -357,19 +363,69 @@ async def delete_dependency(dependency_id: uuid.UUID, db: DbSession):
 @router.get("/resources", response_model=ResourceAdminList)
 async def list_resources(
     db: DbSession,
+    q: Annotated[str | None, Query(max_length=200)] = None,
     skill_id: Annotated[uuid.UUID | None, Query()] = None,
+    profession_id: Annotated[uuid.UUID | None, Query()] = None,
+    resource_type: Annotated[ResourceType | None, Query()] = None,
+    lang: Annotated[str | None, Query(max_length=8)] = None,
+    is_free: Annotated[bool | None, Query()] = None,
+    status_filter: Annotated[ResourceStatus | None, Query(alias="status")] = None,
+    sort_by: Annotated[ResourceSortField, Query()] = "skill",
+    sort_dir: Annotated[SortDirection, Query()] = "asc",
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ):
     items, total = await admin_service.list_resources(
-        db, skill_id=skill_id, limit=limit, offset=offset
-    )
-    return ResourceAdminList(
-        items=[ResourceAdminRead.model_validate(r) for r in items],
-        total=total,
+        db,
+        q=q,
+        skill_id=skill_id,
+        profession_id=profession_id,
+        resource_type=resource_type,
+        lang=lang,
+        is_free=is_free,
+        status_filter=status_filter,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
         limit=limit,
         offset=offset,
     )
+    return ResourceAdminList(items=items, total=total, limit=limit, offset=offset)
+
+
+@router.get("/resources/stats", response_model=ResourceStats)
+async def get_resource_stats(
+    db: DbSession,
+    profession_id: Annotated[uuid.UUID | None, Query()] = None,
+):
+    return await admin_service.get_resource_stats(db, profession_id=profession_id)
+
+
+@router.post("/resources/check-links", response_model=ResourceLinkCheckResult)
+async def check_resource_links(
+    db: DbSession,
+    profession_id: Annotated[uuid.UUID | None, Query()] = None,
+    skill_id: Annotated[uuid.UUID | None, Query()] = None,
+    only_unchecked: Annotated[bool, Query()] = False,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+):
+    rows, ok_count = await admin_service.check_resource_links(
+        db,
+        profession_id=profession_id,
+        skill_id=skill_id,
+        only_unchecked=only_unchecked,
+        limit=limit,
+    )
+    return ResourceLinkCheckResult(
+        checked=len(rows),
+        ok=ok_count,
+        broken=len(rows) - ok_count,
+        items=await admin_service.to_resource_reads(db, rows),
+    )
+
+
+@router.get("/resources/{resource_id}", response_model=ResourceAdminRead)
+async def get_resource(resource_id: uuid.UUID, db: DbSession):
+    return await admin_service.get_resource_read(db, resource_id)
 
 
 @router.post(
@@ -379,7 +435,7 @@ async def list_resources(
 )
 async def create_resource(data: ResourceAdminCreate, db: DbSession):
     resource = await admin_service.create_resource(db, data)
-    return ResourceAdminRead.model_validate(resource)
+    return (await admin_service.to_resource_reads(db, [resource]))[0]
 
 
 @router.patch("/resources/{resource_id}", response_model=ResourceAdminRead)
@@ -387,7 +443,23 @@ async def update_resource(
     resource_id: uuid.UUID, data: ResourceAdminUpdate, db: DbSession
 ):
     resource = await admin_service.update_resource(db, resource_id, data)
-    return ResourceAdminRead.model_validate(resource)
+    return (await admin_service.to_resource_reads(db, [resource]))[0]
+
+
+@router.post(
+    "/resources/{resource_id}/publish", response_model=ResourceAdminRead
+)
+async def publish_resource(resource_id: uuid.UUID, db: DbSession):
+    resource = await admin_service.publish_resource(db, resource_id)
+    return (await admin_service.to_resource_reads(db, [resource]))[0]
+
+
+@router.post(
+    "/resources/{resource_id}/check-link", response_model=ResourceAdminRead
+)
+async def check_resource_link(resource_id: uuid.UUID, db: DbSession):
+    resource, _ = await admin_service.check_resource_link(db, resource_id)
+    return (await admin_service.to_resource_reads(db, [resource]))[0]
 
 
 @router.delete("/resources/{resource_id}", response_model=MessageResponse)

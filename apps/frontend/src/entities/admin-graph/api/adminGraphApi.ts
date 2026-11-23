@@ -11,6 +11,7 @@ import type {
   AdminProfessionPreview,
   AdminProfessionUpdate,
   AdminPublishResult,
+  AdminSkillList,
   AdminSkillPatch,
   DependencyType,
 } from '../model/types';
@@ -144,5 +145,12 @@ export const adminGraphApi = {
   /** GET /admin/dependencies/validate — проверка графа на циклы. */
   validateGraph(): Promise<AdminMessage> {
     return api.get<AdminMessage>('/admin/dependencies/validate');
+  },
+
+  /** GET /admin/skills — справочник навыков (для выпадающих списков). */
+  listSkills(params: { q?: string; category?: string; limit?: number } = {}) {
+    return api.get<AdminSkillList>('/admin/skills', {
+      params: { limit: 200, ...params },
+    });
   },
 };

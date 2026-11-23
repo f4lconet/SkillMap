@@ -116,6 +116,29 @@ export type AdminSkillPatch = Partial<AdminSkillInput> & {
   slug?: string;
 };
 
+/** GET /admin/skills — элемент справочника навыков. */
+export type AdminSkill = {
+  id: string;
+  slug: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  category: string;
+  difficulty: number;
+  layer: number;
+  estimatedHours: number | null;
+  posX: number | null;
+  posY: number | null;
+  professions: string[];
+};
+
+export type AdminSkillList = {
+  items: AdminSkill[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 export type AdminDependency = {
   id: string;
   skillId: string;

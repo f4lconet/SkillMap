@@ -116,15 +116,14 @@ async def _deps_for_skills(
 
 
 async def _resources_for_skills(
-    db: AsyncSession, skill_ids: list[uuid.UUID]
+    db: AsyncSession, skill_ids: list[uuid.UUID], published_only: bool = True
 ) -> dict[uuid.UUID, list[Resource]]:
     if not skill_ids:
         return {}
-    rows = await db.scalars(
-        select(Resource)
-        .where(Resource.skill_id.in_(skill_ids))
-        .order_by(Resource.position)
-    )
+    query = select(Resource).where(Resource.skill_id.in_(skill_ids))
+    if published_only:
+        query = query.where(Resource.status == "published")
+    rows = await db.scalars(query.order_by(Resource.position))
     result: dict[uuid.UUID, list[Resource]] = {sid: [] for sid in skill_ids}
     for r in rows:
         result.setdefault(r.skill_id, []).append(r)
@@ -285,8 +284,7 @@ async def get_profession_map(
     )
     skill_ids = [ps.skill_id for ps in links]
     deps_map = await _deps_for_skills(db, skill_ids)
-    res_map = await _resources_for_skills(db, skill_ids)
-
+    res_map = await _resources_for_skills(db, skill_ids, published_only=not allow_draft)
     user_map: dict[uuid.UUID, UserSkill] = {}
     status_map: dict[uuid.UUID, str] = {}
     if user and skill_ids:

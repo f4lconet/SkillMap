@@ -18,7 +18,8 @@ class Resource(Base, IdMixin, TimestampMixin):
     skill_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("skills.id", ondelete="CASCADE"), index=True
     )
-    title: Mapped[str] = mapped_column(String(300))
+    # Названия из контента аналитика бывают длинными (до ~350 символов)
+    title: Mapped[str] = mapped_column(String(500))
     url: Mapped[str] = mapped_column(String(1000), default="")
     resource_type: Mapped[str] = mapped_column(
         String(30), default="course"
@@ -29,6 +30,16 @@ class Resource(Base, IdMixin, TimestampMixin):
     description: Mapped[str] = mapped_column(Text, default="")
     estimated_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     position: Mapped[int] = mapped_column(Integer, default=0)
+    # Редакторский статус: draft | published | needs_review
+    status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    # Состояние ссылки: unknown | ok | broken
+    link_status: Mapped[str] = mapped_column(String(20), default="unknown")
+    last_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     skill: Mapped["Skill"] = relationship(  # noqa: F821
         back_populates="resources", lazy="joined"

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 
 import pytest
@@ -759,3 +760,223 @@ async def test_admin_graph_editor_flow(client: AsyncClient, editor_headers):
     assert all(n["pos_x"] is None and n["pos_y"] is None for n in graph["nodes"])
 
     await client.delete(f"/api/v1/admin/professions/{pid}", headers=editor_headers)
+
+
+# ------------------ Ресурсы: фильтры, статусы, проверка ссылок --------------------
+
+
+@pytest.mark.asyncio
+async def test_admin_resource_read_has_skill_and_404(
+    client: AsyncClient, editor_headers, skill_ids
+):
+    r = await client.post(
+        "/api/v1/admin/resources",
+        json={"skill_id": str(skill_ids["git-cli"]), "title": "Pro Git"},
+        headers=editor_headers,
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["skill_slug"] == "git-cli"
+    assert body["skill_title"]
+    assert body["status"] == "draft"
+    assert body["published_at"] is None
+
+    r = await client.get(f"/api/v1/admin/resources/{body['id']}", headers=editor_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["skill_slug"] == "git-cli"
+
+    r = await client.get(
+        f"/api/v1/admin/resources/{uuid.uuid4()}", headers=editor_headers
+    )
+    assert r.status_code == 404, r.text
+
+    await client.delete(f"/api/v1/admin/resources/{body['id']}", headers=editor_headers)
+
+
+@pytest.mark.asyncio
+async def test_admin_resource_filters_and_sorting(
+    client: AsyncClient, editor_headers, skill_ids, profession_ids
+):
+    url = "/api/v1/admin/resources"
+    r = await client.get(url, params={"resource_type": "book"}, headers=editor_headers)
+    assert r.status_code == 200, r.text
+    books = r.json()
+    assert books["total"] > 0
+    assert all(i["resource_type"] == "book" for i in books["items"])
+
+    r = await client.get(url, params={"lang": "en"}, headers=editor_headers)
+    assert r.status_code == 200, r.text
+    assert all(i["lang"] == "en" for i in r.json()["items"])
+
+    r = await client.get(url, params={"is_free": "false"}, headers=editor_headers)
+    assert r.status_code == 200, r.text
+    assert all(i["is_free"] is False for i in r.json()["items"])
+
+    r = await client.get(url, params={"q": "pro git"}, headers=editor_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["total"] >= 1
+
+    profession_id = str(profession_ids[sorted(profession_ids)[0]])
+    r = await client.get(
+        url, params={"profession_id": profession_id}, headers=editor_headers
+    )
+    assert r.status_code == 200, r.text
+    scoped = r.json()["total"]
+    assert 0 < scoped < 341
+
+    r = await client.get(
+        url,
+        params={"skill_id": str(skill_ids["git-cli"]), "sort_by": "title", "sort_dir": "desc"},
+        headers=editor_headers,
+    )
+    assert r.status_code == 200, r.text
+    titles = [i["title"] for i in r.json()["items"]]
+    assert titles == sorted(titles, reverse=True)
+
+    r = await client.get(
+        url, params={"sort_by": "nonsense"}, headers=editor_headers
+    )
+    assert r.status_code == 422, r.text
+
+
+@pytest.mark.asyncio
+async def test_admin_resource_stats_and_publish(
+    client: AsyncClient, editor_headers, skill_ids, profession_ids
+):
+    stats_url = "/api/v1/admin/resources/stats"
+    r = await client.get(stats_url, headers=editor_headers)
+    assert r.status_code == 200, r.text
+    base = r.json()
+    assert base["total"] == 341
+    assert base["published"] == 341
+    assert base["draft"] == 0
+    assert base["unchecked_links"] == 341
+
+    r = await client.post(
+        "/api/v1/admin/resources",
+        json={"skill_id": str(skill_ids["git-cli"]), "title": "Черновик"},
+        headers=editor_headers,
+    )
+    assert r.status_code == 201, r.text
+    rid = r.json()["id"]
+
+    stats = (await client.get(stats_url, headers=editor_headers)).json()
+    assert stats["total"] == base["total"] + 1
+    assert stats["draft"] == 1
+
+    r = await client.post(
+        f"/api/v1/admin/resources/{rid}/publish", headers=editor_headers
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "published"
+    assert r.json()["published_at"] is not None
+
+    stats = (await client.get(stats_url, headers=editor_headers)).json()
+    assert stats["draft"] == 0
+    assert stats["published"] == base["published"] + 1
+
+    r = await client.get(
+        "/api/v1/admin/resources", params={"status": "draft"}, headers=editor_headers
+    )
+    assert r.status_code == 200, r.text
+    assert all(i["status"] == "draft" for i in r.json()["items"])
+
+    profession_id = str(profession_ids[sorted(profession_ids)[0]])
+    scoped = (
+        await client.get(
+            stats_url, params={"profession_id": profession_id}, headers=editor_headers
+        )
+    ).json()
+    assert scoped["profession_id"] == profession_id
+    assert scoped["total"] < stats["total"]
+
+    await client.delete(f"/api/v1/admin/resources/{rid}", headers=editor_headers)
+
+
+@pytest.mark.asyncio
+async def test_admin_resource_link_check(
+    client: AsyncClient, editor_headers, skill_ids, monkeypatch
+):
+    async def fake_probe(url: str) -> bool:
+        return "broken" not in url
+
+    monkeypatch.setattr("app.services.admin._probe_url", fake_probe)
+
+    r = await client.post(
+        "/api/v1/admin/resources",
+        json={
+            "skill_id": str(skill_ids["git-cli"]),
+            "title": "Битая ссылка",
+            "url": "https://example.com/broken",
+            "status": "published",
+        },
+        headers=editor_headers,
+    )
+    assert r.status_code == 201, r.text
+    rid = r.json()["id"]
+    assert r.json()["link_status"] == "unknown"
+
+    r = await client.post(
+        f"/api/v1/admin/resources/{rid}/check-link", headers=editor_headers
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["link_status"] == "broken"
+    assert r.json()["status"] == "needs_review"
+    assert r.json()["last_checked_at"] is not None
+
+    r = await client.patch(
+        f"/api/v1/admin/resources/{rid}",
+        json={"url": "https://example.com/ok"},
+        headers=editor_headers,
+    )
+    assert r.status_code == 200, r.text
+
+    r = await client.post(
+        f"/api/v1/admin/resources/{rid}/check-link", headers=editor_headers
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["link_status"] == "ok"
+    assert r.json()["status"] == "published"
+
+    stats = (
+        await client.get("/api/v1/admin/resources/stats", headers=editor_headers)
+    ).json()
+    assert stats["broken_links"] == 0
+
+    bulk = await client.post(
+        "/api/v1/admin/resources/check-links",
+        params={"skill_id": str(skill_ids["git-cli"]), "limit": 2},
+        headers=editor_headers,
+    )
+    assert bulk.status_code == 200, bulk.text
+    assert bulk.json()["checked"] <= 2
+
+    await client.delete(f"/api/v1/admin/resources/{rid}", headers=editor_headers)
+
+
+@pytest.mark.asyncio
+async def test_admin_resource_estimated_hours_can_be_cleared(
+    client: AsyncClient, editor_headers, skill_ids
+):
+    r = await client.post(
+        "/api/v1/admin/resources",
+        json={
+            "skill_id": str(skill_ids["git-cli"]),
+            "title": "С часами",
+            "estimated_hours": 5,
+        },
+        headers=editor_headers,
+    )
+    assert r.status_code == 201, r.text
+    rid = r.json()["id"]
+    assert r.json()["estimated_hours"] == 5
+
+    r = await client.patch(
+        f"/api/v1/admin/resources/{rid}",
+        json={"estimated_hours": None},
+        headers=editor_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["estimated_hours"] is None
+
+    await client.delete(f"/api/v1/admin/resources/{rid}", headers=editor_headers)

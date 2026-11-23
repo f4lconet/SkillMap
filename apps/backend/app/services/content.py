@@ -19,6 +19,7 @@ from app.models import (
     Skill,
     SkillDependency,
 )
+from app.models.base import utcnow
 
 ContentData = dict[str, Any]
 
@@ -171,6 +172,9 @@ async def load_content(db: AsyncSession, data: ContentData) -> dict[str, int]:
         row.estimated_hours = res.get("hours")
         row.position = positions.get(res["skill_id"], 0)
         positions[res["skill_id"]] = row.position + 1
+        # Контент аналитика сразу публикуется: черновики — удел правок в админке
+        row.status = "published"
+        row.published_at = row.published_at or utcnow()
 
     await db.flush()
     return {
