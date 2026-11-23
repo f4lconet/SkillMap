@@ -1,12 +1,8 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+// Inter хостим сами (@fontsource): next/font/google требует доступа к
+// fonts.googleapis.com на старте и ломает запуск без интернета.
+import '@fontsource-variable/inter';
 import '@/shared/styles/globals.css';
-
-const inter = Inter({
-  subsets: ['latin', 'cyrillic'],
-  variable: '--font-sans',
-  display: 'swap',
-});
 
 export const metadata: Metadata = {
   title: 'SkillMap — карта навыков и понятный путь к профессии',
@@ -20,7 +16,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ru" className={inter.variable}>
+    <html lang="ru">
       <body
         className="min-h-screen bg-page font-sans text-text antialiased"
         suppressHydrationWarning

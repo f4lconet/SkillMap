@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
     "@xyflow/react": "^12.12.1",
     "axios": "^1.21.0",
     "axios-case-converter": "^2.0.3",
