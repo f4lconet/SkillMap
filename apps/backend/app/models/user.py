@@ -14,6 +14,10 @@ class User(Base, IdMixin, TimestampMixin):
 
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(100))
+    # Публичный идентификатор: /u/{username}
+    username: Mapped[str | None] = mapped_column(
+        String(32), unique=True, index=True, nullable=True
+    )
     # NULL: аккаунт через OAuth (позже)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role: Mapped[UserRole] = mapped_column(user_role_type, default=UserRole.STUDENT)

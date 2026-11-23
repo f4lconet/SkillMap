@@ -27,20 +27,34 @@ from app.services.skills import (
     get_profession_map,
     get_profession_or_404,
 )
+from app.services.username import (
+    generate_username,
+    normalize_username,
+    username_from_email,
+)
 
 TOKEN_BYTES = 24
 
 
+def _frontend_base() -> str:
+    return get_settings().frontend_url.rstrip("/")
+
+
 def share_url(token: str) -> str:
-    base = get_settings().frontend_url.rstrip("/")
-    return f"{base}/public/{token}"
+    return f"{_frontend_base()}/public/{token}"
+
+
+def profile_url(username: str | None) -> str | None:
+    return f"{_frontend_base()}/u/{username}" if username else None
 
 
 def _state(user: User) -> ShareState:
-    enabled = bool(user.share_enabled and user.share_token)
+    enabled = bool(user.share_enabled and (user.username or user.share_token))
     return ShareState(
         enabled=enabled,
+        username=user.username if enabled else None,
         token=user.share_token if enabled else None,
+        profile_url=profile_url(user.username) if enabled else None,
         url=share_url(user.share_token) if enabled and user.share_token else None,
         shared_at=user.shared_at if enabled else None,
     )
@@ -70,6 +84,8 @@ async def enable_sharing(db: AsyncSession, user: User) -> ShareState:
         )
     if not user.share_token:
         user.share_token = await _new_token(db)
+    if not user.username:
+        user.username = await generate_username(db, username_from_email(user.email))
     user.share_enabled = True
     user.shared_at = datetime.now(UTC)
     db.add(user)
@@ -102,12 +118,34 @@ async def load_shared_user(db: AsyncSession, token: str) -> User:
     return user
 
 
+async def load_shared_user_by_username(db: AsyncSession, username: str) -> User:
+    user = await db.scalar(
+        select(User).where(
+            User.username == normalize_username(username),
+            User.share_enabled.is_(True),
+        )
+    )
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Карта не найдена"
+        )
+    return user
+
+
 async def public_map(db: AsyncSession, token: str) -> PublicMapResponse:
-    user = await load_shared_user(db, token)
+    return await _public_payload(db, await load_shared_user(db, token))
+
+
+async def public_map_by_username(db: AsyncSession, username: str) -> PublicMapResponse:
+    return await _public_payload(db, await load_shared_user_by_username(db, username))
+
+
+async def _public_payload(db: AsyncSession, user: User) -> PublicMapResponse:
     pid = user.target_profession_id
 
     if not pid:
         return PublicMapResponse(
+            username=user.username,
             owner_name=user.name,
             owner_level=user.level,
             shared_at=user.shared_at,
@@ -121,6 +159,7 @@ async def public_map(db: AsyncSession, token: str) -> PublicMapResponse:
     plan = await build_trajectory(db, user, pid, persist=False)
 
     return PublicMapResponse(
+        username=user.username,
         owner_name=user.name,
         owner_level=user.level,
         profession_id=profession.id,

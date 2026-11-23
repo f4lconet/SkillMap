@@ -536,7 +536,9 @@ async def test_public_share_lifecycle(
     state = r.json()
     assert state["enabled"] is True
     token = state["token"]
+    username = state["username"]
     assert token and state["url"].endswith(f"/public/{token}")
+    assert username and state["profile_url"].endswith(f"/u/{username}")
 
     # повторное включение отдаёт ту же ссылку
     r = await client.post("/api/v1/me/share", headers=headers)
@@ -554,6 +556,18 @@ async def test_public_share_lifecycle(
     assert public["plan"]["total_weeks"] >= 1
     assert public["plan"]["hours_per_week"] == 8
 
+    # карта по человекочитаемому адресу /u/{username}
+    assert public["username"] == username
+    r = await client.get(f"/api/v1/public/u/{username}")
+    assert r.status_code == 200, r.text
+    by_name = r.json()
+    assert by_name["owner_name"] == public["owner_name"]
+    assert by_name["profession_id"] == public["profession_id"]
+    assert by_name["gap"] == public["gap"]
+
+    r = await client.get("/api/v1/public/u/unknown-user")
+    assert r.status_code == 404
+
     r = await client.get("/api/v1/public/unknown-token")
     assert r.status_code == 404
 
@@ -561,12 +575,17 @@ async def test_public_share_lifecycle(
     assert r.status_code == 200, r.text
     assert r.json() == {
         "enabled": False,
+        "username": None,
         "token": None,
+        "profile_url": None,
         "url": None,
         "shared_at": None,
     }
 
     r = await client.get(f"/api/v1/public/{token}")
+    assert r.status_code == 404
+
+    r = await client.get(f"/api/v1/public/u/{username}")
     assert r.status_code == 404
 
 

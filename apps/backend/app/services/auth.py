@@ -25,6 +25,7 @@ from app.models import (
 )
 from app.models.base import utcnow
 from app.schemas.auth import RegisterRequest
+from app.services.username import generate_username, username_from_email
 
 INVALID_CREDENTIALS = "Неверный email или пароль"
 INVALID_REFRESH = "Сессия недействительна, войдите снова"
@@ -47,6 +48,7 @@ async def register_user(db: AsyncSession, data: RegisterRequest) -> User:
     user = User(
         email=data.email,
         name=data.name,
+        username=await generate_username(db, username_from_email(data.email)),
         password_hash=hash_password(data.password),
         role=UserRole.STUDENT,
         is_email_verified=False,

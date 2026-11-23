@@ -14,6 +14,7 @@ class UserRead(BaseModel):
     id: uuid.UUID
     email: str
     name: str
+    username: str | None = None
     role: UserRole
     level: Level | None
     hours_per_week: int | None

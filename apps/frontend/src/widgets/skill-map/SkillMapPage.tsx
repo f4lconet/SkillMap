@@ -11,6 +11,7 @@ import {
   type SkillFilter,
 } from '@/features/skill-map';
 import { USER_LEVEL_LABELS, USER_ROLE_LABELS } from '@/entities/user';
+import { useShareState } from '@/entities/public-profile';
 import { cn } from '@/shared/lib/cn';
 
 const chips: { key: SkillFilter; label: string }[] = [
@@ -42,7 +43,20 @@ export function SkillMapPage() {
   const [filter, setFilter] = useState<SkillFilter>('all');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [shareHint, setShareHint] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const share = useShareState();
+
+  const handleShare = async () => {
+    setShareOpen(true);
+    if (share.loading || share.pending) return;
+    if (share.enabled) {
+      await share.copyLink();
+      return;
+    }
+    const next = await share.enable();
+    const url = next?.profileUrl ?? next?.url ?? null;
+    if (url) await share.copyLink(url);
+  };
 
   const levelLabel = user?.level ? USER_LEVEL_LABELS[user.level] : null;
 
@@ -151,8 +165,10 @@ export function SkillMapPage() {
             variant="secondary"
             size="sm"
             leftIcon={<ShareIcon />}
-            onClick={() => setShareHint((v) => !v)}
-            title="Скоро"
+            onClick={() => void handleShare()}
+            isLoading={share.pending === 'enable'}
+            disabled={share.loading}
+            title="Публичная ссылка на карту"
           >
             Поделиться картой
           </Button>
@@ -165,9 +181,69 @@ export function SkillMapPage() {
         </div>
       )}
 
-      {shareHint && (
-        <div className="mt-4 rounded-xl border border-border bg-surface px-4 py-2.5 text-helper text-secondary">
-          Публичные ссылки на карту скоро появятся — раздел в разработке.
+      {shareOpen && (
+        <div className="mt-4 rounded-xl border border-border bg-surface px-4 py-3">
+          {share.error ? (
+            <p className="text-helper text-danger">{share.error}</p>
+          ) : share.loading ? (
+            <p className="text-helper text-secondary">
+              Загружаем настройки публичной ссылки…
+            </p>
+          ) : share.enabled && share.shareUrl ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-helper font-medium text-text">
+                  Публичная ссылка готова
+                </p>
+                <p className="truncate text-helper text-secondary">
+                  {share.shareUrl}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void share.copyLink()}
+                >
+                  {share.copied ? 'Скопировано' : 'Копировать'}
+                </Button>
+                {share.state?.username && (
+                  <Link
+                    href={`/u/${share.state.username}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Button variant="primary" size="sm">
+                      Открыть
+                    </Button>
+                  </Link>
+                )}
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  isLoading={share.pending === 'disable'}
+                  onClick={() => void share.disable()}
+                >
+                  Отключить
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-helper text-secondary">
+              Публичная ссылка выключена. Нажмите «Поделиться картой», чтобы
+              включить её и скопировать адрес.
+            </p>
+          )}
+          <p className="mt-2 text-helper text-secondary">
+            Управлять ссылкой можно в{' '}
+            <Link
+              href="/profile#public-map"
+              className="font-medium text-accent underline"
+            >
+              профиле
+            </Link>
+            .
+          </p>
         </div>
       )}
 

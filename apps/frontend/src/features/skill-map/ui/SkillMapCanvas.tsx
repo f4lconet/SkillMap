@@ -18,6 +18,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import { SkillFlowNode } from './SkillFlowNode';
+import { cn } from '@/shared/lib/cn';
 import type { SkillMapNodeData, SkillFilter, NodePositions } from '../model/types';
 
 const nodeTypes: NodeTypes = {
@@ -36,11 +37,14 @@ type Props = {
   search: string;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  onMove: (positions: NodePositions) => void;
-  canUndo: boolean;
-  canRedo: boolean;
-  onUndo: () => void;
-  onRedo: () => void;
+  /** Просмотр без редактирования: узлы не перетаскиваются, истории нет. */
+  readOnly?: boolean;
+  onMove?: (positions: NodePositions) => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  className?: string;
 };
 
 type HistoryButtonProps = {
@@ -102,11 +106,13 @@ export function SkillMapCanvas({
   search,
   selectedId,
   onSelect,
+  readOnly = false,
   onMove,
-  canUndo,
-  canRedo,
+  canUndo = false,
+  canRedo = false,
   onUndo,
   onRedo,
+  className,
 }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
 
@@ -217,6 +223,7 @@ export function SkillMapCanvas({
   // После перетаскивания запоминаем позиции всех узлов — это шаг истории.
   const onNodeDragStop = useCallback(
     (_: unknown, __: Node<SkillMapNodeData>, all: Node<SkillMapNodeData>[]) => {
+      if (!onMove) return;
       const next: NodePositions = {};
       for (const node of all) next[node.id] = { ...node.position };
       onMove(next);
@@ -226,6 +233,7 @@ export function SkillMapCanvas({
 
   // Ctrl+Z / Ctrl+Y — отмена и повтор действий на карте.
   useEffect(() => {
+    if (readOnly || !onUndo || !onRedo) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
       const target = event.target as HTMLElement | null;
@@ -248,7 +256,7 @@ export function SkillMapCanvas({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [canRedo, canUndo, onRedo, onUndo]);
+  }, [canRedo, canUndo, onRedo, onUndo, readOnly]);
 
   // Средняя кнопка («колесо») панорамирует карту, но браузер параллельно
   // запускает нативный автоскролл ближайшего скролл-контейнера. Capture-фаза
@@ -260,7 +268,12 @@ export function SkillMapCanvas({
 
   if (nodes.length === 0) {
     return (
-      <div className="flex h-[520px] w-full items-center justify-center rounded-2xl border border-dashed border-border bg-[#F8F9FC] text-helper text-secondary">
+      <div
+        className={cn(
+          'flex h-[520px] w-full items-center justify-center rounded-2xl border border-dashed border-border bg-[#F8F9FC] text-helper text-secondary',
+          className
+        )}
+      >
         Навыков пока нет
       </div>
     );
@@ -268,7 +281,10 @@ export function SkillMapCanvas({
 
   return (
     <div
-      className="relative h-[560px] w-full rounded-2xl border border-border bg-[#F8F9FC]"
+      className={cn(
+        'relative h-[560px] w-full rounded-2xl border border-border bg-[#F8F9FC]',
+        className
+      )}
       onMouseDownCapture={stopMiddleButtonScroll}
     >
       <ReactFlow
@@ -285,7 +301,7 @@ export function SkillMapCanvas({
         minZoom={0.3}
         maxZoom={1.5}
         connectionLineType={ConnectionLineType.Bezier}
-        nodesDraggable
+        nodesDraggable={!readOnly}
         nodesConnectable={false}
         elementsSelectable
         defaultEdgeOptions={{ type: 'default', style: EDGE_STYLE }}
@@ -302,22 +318,24 @@ export function SkillMapCanvas({
         />
       </ReactFlow>
 
-      <div className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-xl border border-border bg-surface p-1 shadow-soft">
-        <HistoryButton
-          label="Отменить"
-          shortcut="Ctrl+Z"
-          direction="undo"
-          disabled={!canUndo}
-          onClick={onUndo}
-        />
-        <HistoryButton
-          label="Вернуть"
-          shortcut="Ctrl+Y"
-          direction="redo"
-          disabled={!canRedo}
-          onClick={onRedo}
-        />
-      </div>
+      {!readOnly && onUndo && onRedo && (
+        <div className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-xl border border-border bg-surface p-1 shadow-soft">
+          <HistoryButton
+            label="Отменить"
+            shortcut="Ctrl+Z"
+            direction="undo"
+            disabled={!canUndo}
+            onClick={onUndo}
+          />
+          <HistoryButton
+            label="Вернуть"
+            shortcut="Ctrl+Y"
+            direction="redo"
+            disabled={!canRedo}
+            onClick={onRedo}
+          />
+        </div>
+      )}
     </div>
   );
 }

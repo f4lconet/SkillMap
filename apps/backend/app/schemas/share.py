@@ -19,7 +19,11 @@ class ShareState(BaseModel):
     """Состояние публичной ссылки текущего пользователя."""
 
     enabled: bool
+    username: str | None = None
     token: str | None = None
+    # Ссылка на карту по username: {frontend_url}/u/{username}
+    profile_url: str | None = None
+    # Ссылка по токену (legacy): {frontend_url}/public/{token}
     url: str | None = None
     shared_at: datetime | None = None
 
@@ -43,6 +47,7 @@ class PublicPlanSummary(BaseModel):
 class PublicMapResponse(BaseModel):
     """Read-only карта по публичной ссылке: без email и служебных полей."""
 
+    username: str | None = None
     owner_name: str
     owner_level: Level | None = None
     profession_id: uuid.UUID | None = None

@@ -37,6 +37,14 @@ async def delete_share_link(db: DbSession, user: CurrentUser) -> ShareState:
     return await share_service.disable_sharing(db, user)
 
 
+@public_router.get("/u/{username}", response_model=PublicMapResponse)
+async def read_public_map_by_username(
+    db: DbSession, username: str
+) -> PublicMapResponse:
+    """Read-only карта по человекочитаемому адресу /u/{username}."""
+    return await share_service.public_map_by_username(db, username)
+
+
 @public_router.get("/{token}", response_model=PublicMapResponse)
 async def read_public_map(db: DbSession, token: str) -> PublicMapResponse:
     return await share_service.public_map(db, token)

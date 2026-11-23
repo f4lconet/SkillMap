@@ -15,6 +15,7 @@ from app.core.database import SessionLocal, engine
 from app.core.security import hash_password
 from app.models import User, UserRole
 from app.services.content import content_stats, load_content, load_content_data
+from app.services.username import generate_username, username_from_email
 
 DEV_USERS = [
     ("student@example.com", "Тестовый студент", "Student123", UserRole.STUDENT),
@@ -47,6 +48,7 @@ async def seed_dev_users() -> None:
                 User(
                     email=email,
                     name=name,
+                    username=await generate_username(db, username_from_email(email)),
                     password_hash=hash_password(password),
                     role=role,
                     is_email_verified=True,

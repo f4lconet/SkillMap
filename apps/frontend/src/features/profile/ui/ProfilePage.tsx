@@ -15,6 +15,7 @@ import {
   type UserLevel,
 } from '@/entities/user';
 import { useProfileData } from '../model/useProfileData';
+import { PublicMapSection } from './PublicMapSection';
 
 const HOURS_OPTIONS = [5, 10, 15, 20, 25, 30, 35, 40];
 
@@ -151,7 +152,10 @@ function ProfileSettingsForm({
   };
 
   return (
-    <section className="rounded-2xl border border-border bg-surface p-6">
+    <section
+      id="profile-settings"
+      className="rounded-2xl border border-border bg-surface p-6"
+    >
       <h2 className="text-section text-text">Личные данные и цель</h2>
 
       <div className="mt-4 space-y-4">
@@ -403,35 +407,7 @@ export function ProfilePage() {
             />
 
             {/* Public map */}
-            <section className="rounded-2xl border border-border bg-surface p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-section text-text">Публичная карта</h2>
-                    <Badge variant="locked">Скоро</Badge>
-                  </div>
-                  <p className="mt-1 text-body font-medium text-text">
-                    Карта доступна по ссылке
-                  </p>
-                  <p className="text-helper text-secondary">
-                    Покажите навыки и прогресс без личных настроек.
-                  </p>
-                </div>
-                <Toggle
-                  checked={false}
-                  readOnly
-                  disabled
-                  aria-label="Публичная карта"
-                />
-              </div>
-
-              <div className="mt-4 rounded-xl border border-dashed border-border bg-page px-3 py-2.5 text-helper text-secondary">
-                Публичная ссылка появится вместе с картой навыков
-              </div>
-              <p className="mt-2 text-helper text-secondary">
-                Email и учебный план не публикуются
-              </p>
-            </section>
+            <PublicMapSection hasProfession={Boolean(user.targetProfession)} />
 
             {/* Notifications */}
             <section className="rounded-2xl border border-border bg-surface p-6">

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.models import User, UserRole
 from app.services.auth import issue_tokens
+from app.services.username import generate_username, username_from_email
 
 GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
@@ -107,6 +108,9 @@ async def get_or_create_github_user(db: AsyncSession, gh: dict[str, Any]) -> Use
     user = User(
         email=gh["email"],
         name=gh["name"][:100],
+        username=await generate_username(
+            db, gh.get("login") or username_from_email(gh["email"])
+        ),
         password_hash=None,  # OAuth-аккаунт
         role=UserRole.STUDENT,
         is_email_verified=True,
