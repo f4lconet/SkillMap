@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
+from collections.abc import Hashable
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -16,24 +17,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import SkillDependency
 
 
-def find_cycle(
-    edges: list[tuple[uuid.UUID, uuid.UUID]],
-) -> list[uuid.UUID] | None:
+def find_cycle[NodeT: Hashable](
+    edges: list[tuple[NodeT, NodeT]],
+) -> list[NodeT] | None:
     """Ищет цикл в направленном графе prerequisite → skill.
 
     Возвращает путь цикла (первый узел повторён в конце) или None.
+    Работает с любыми хешируемыми узлами: UUID в БД, slug в контенте.
     """
-    graph: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
-    nodes: set[uuid.UUID] = set()
+    graph: dict[NodeT, list[NodeT]] = defaultdict(list)
+    nodes: set[NodeT] = set()
     for skill_id, prerequisite_id in edges:
         graph[prerequisite_id].append(skill_id)
         nodes.add(skill_id)
         nodes.add(prerequisite_id)
 
-    color: dict[uuid.UUID, int] = {}
-    stack: list[uuid.UUID] = []
+    color: dict[NodeT, int] = {}
+    stack: list[NodeT] = []
 
-    def dfs(node: uuid.UUID) -> list[uuid.UUID] | None:
+    def dfs(node: NodeT) -> list[NodeT] | None:
         color[node] = 1
         stack.append(node)
         for nxt in graph.get(node, []):

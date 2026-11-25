@@ -121,3 +121,5 @@ class UserSkill(Base, IdMixin, TimestampMixin):
         String(20), default="not_started", index=True
     )
     self_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Откуда навык взялся: NULL — вручную, иначе github/stepik/quiz
+    source: Mapped[str | None] = mapped_column(String(20), nullable=True)

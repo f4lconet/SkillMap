@@ -68,7 +68,8 @@ class ExportUser(BaseModel):
 
 class ExportMeta(BaseModel):
     app: str = "SkillMap"
-    version: str = "2026-11-w4"
+    # Версия контракта экспорта: фронт проверяет её перед рендером PDF
+    version: str = "2026-11-w5"
     generated_at: datetime
     share_url: str | None = None
 

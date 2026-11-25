@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     github_client_id: str | None = None
     github_client_secret: str | None = None
     github_redirect_uri: str | None = None
+    # Необязательный токен для импорта: поднимает лимит GitHub API 60 → 5000 req/h
+    github_import_token: str | None = None
 
     @property
     def is_development(self) -> bool:

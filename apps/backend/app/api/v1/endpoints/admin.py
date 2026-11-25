@@ -12,6 +12,12 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, DbSession, require_role
+from app.api.pagination import (
+    DEFAULT_ADMIN_LARGE_LIMIT,
+    DEFAULT_ADMIN_LIMIT,
+    LimitQuery,
+    OffsetQuery,
+)
 from app.models import ProfessionStatus, UserRole
 from app.schemas.admin import (
     DependencyCreate,
@@ -104,8 +110,8 @@ async def list_professions(
     db: DbSession,
     q: Annotated[str | None, Query(max_length=100)] = None,
     status_filter: Annotated[ProfessionStatus | None, Query(alias="status")] = None,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: LimitQuery = DEFAULT_ADMIN_LIMIT,
+    offset: OffsetQuery = 0,
 ):
     items, total = await admin_service.list_professions(
         db,
@@ -243,8 +249,8 @@ async def list_skills(
     db: DbSession,
     q: Annotated[str | None, Query(max_length=100)] = None,
     category: Annotated[str | None, Query(max_length=100)] = None,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: LimitQuery = DEFAULT_ADMIN_LIMIT,
+    offset: OffsetQuery = 0,
 ):
     items, total = await admin_service.list_skills(
         db, q=q, category=category, limit=limit, offset=offset
@@ -316,8 +322,8 @@ async def list_dependencies(
     db: DbSession,
     skill_id: Annotated[uuid.UUID | None, Query()] = None,
     related_to: Annotated[uuid.UUID | None, Query()] = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 200,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: LimitQuery = DEFAULT_ADMIN_LARGE_LIMIT,
+    offset: OffsetQuery = 0,
 ):
     items, total = await admin_service.list_dependencies(
         db, skill_id=skill_id, related_to=related_to, limit=limit, offset=offset
@@ -372,8 +378,8 @@ async def list_resources(
     status_filter: Annotated[ResourceStatus | None, Query(alias="status")] = None,
     sort_by: Annotated[ResourceSortField, Query()] = "skill",
     sort_dir: Annotated[SortDirection, Query()] = "asc",
-    limit: Annotated[int, Query(ge=1, le=500)] = 200,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: LimitQuery = DEFAULT_ADMIN_LARGE_LIMIT,
+    offset: OffsetQuery = 0,
 ):
     items, total = await admin_service.list_resources(
         db,
@@ -406,7 +412,7 @@ async def check_resource_links(
     profession_id: Annotated[uuid.UUID | None, Query()] = None,
     skill_id: Annotated[uuid.UUID | None, Query()] = None,
     only_unchecked: Annotated[bool, Query()] = False,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    limit: LimitQuery = DEFAULT_ADMIN_LIMIT,
 ):
     rows, ok_count = await admin_service.check_resource_links(
         db,

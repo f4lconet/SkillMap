@@ -15,6 +15,11 @@ from app.core.database import SessionLocal, engine
 from app.core.security import hash_password
 from app.models import User, UserRole
 from app.services.content import content_stats, load_content, load_content_data
+from app.services.content_validation import (
+    ContentValidationError,
+    content_report,
+    format_report,
+)
 from app.services.username import generate_username, username_from_email
 
 DEV_USERS = [
@@ -25,9 +30,15 @@ DEV_USERS = [
 
 async def seed_all() -> None:
     data = load_content_data()
-    async with SessionLocal() as db:
-        await load_content(db, data)
-        await db.commit()
+    try:
+        async with SessionLocal() as db:
+            await load_content(db, data)
+            await db.commit()
+    except ContentValidationError:
+        print(format_report(content_report(data)))
+        raise SystemExit(
+            "Контент не загружен: сначала исправьте ошибки выше"
+        ) from None
 
     stats = content_stats(data)
     print(

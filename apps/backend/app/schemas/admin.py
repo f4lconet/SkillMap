@@ -4,8 +4,15 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import Annotated, Literal
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+)
 
 from app.models.enums import DependencyType, Level, ProfessionStatus
 from app.schemas.skill import ProfessionMapResponse
@@ -20,6 +27,21 @@ Slug = Annotated[
     ),
 ]
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)]
+
+
+def _validate_resource_url(value: str) -> str:
+    """Ловим опечатки в ссылках до сохранения, а не в проверке доступности."""
+    scheme = urlparse(value.strip()).scheme.lower()
+    if value.strip() and scheme not in {"http", "https"}:
+        raise ValueError("Ссылка должна начинаться с http:// или https://")
+    return value
+
+
+ResourceUrl = Annotated[
+    str,
+    StringConstraints(max_length=1000),
+    AfterValidator(_validate_resource_url),
+]
 # Названия ресурсов из контента аналитика бывают длиннее ShortText
 ResourceTitle = Annotated[
     str, StringConstraints(strip_whitespace=True, max_length=500)
@@ -200,7 +222,7 @@ class DependencyList(BaseModel):
 class ResourceAdminCreate(BaseModel):
     skill_id: uuid.UUID
     title: ResourceTitle
-    url: Annotated[str, StringConstraints(max_length=1000)] = ""
+    url: ResourceUrl = ""
     resource_type: ResourceType = "course"
     is_free: bool = True
     provider: Annotated[str, StringConstraints(max_length=100)] = ""
@@ -214,7 +236,7 @@ class ResourceAdminCreate(BaseModel):
 class ResourceAdminUpdate(BaseModel):
     skill_id: uuid.UUID | None = None
     title: ResourceTitle | None = None
-    url: Annotated[str, StringConstraints(max_length=1000)] | None = None
+    url: ResourceUrl | None = None
     resource_type: ResourceType | None = None
     is_free: bool | None = None
     provider: Annotated[str, StringConstraints(max_length=100)] | None = None

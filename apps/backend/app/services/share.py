@@ -48,6 +48,15 @@ def profile_url(username: str | None) -> str | None:
     return f"{_frontend_base()}/u/{username}" if username else None
 
 
+def public_link(user: User) -> str | None:
+    """Каноническая публичная ссылка: /u/{username}, иначе legacy /public/{token}."""
+    if not user.share_enabled:
+        return None
+    return profile_url(user.username) or (
+        share_url(user.share_token) if user.share_token else None
+    )
+
+
 def _state(user: User) -> ShareState:
     enabled = bool(user.share_enabled and (user.username or user.share_token))
     return ShareState(
@@ -210,7 +219,7 @@ async def build_export(
     return ExportPayload(
         meta=ExportMeta(
             generated_at=datetime.now(UTC),
-            share_url=share_url(user.share_token) if user.share_token else None,
+            share_url=public_link(user),
         ),
         user=ExportUser(
             name=user.name,
@@ -233,6 +242,10 @@ __all__ = [
     "enable_sharing",
     "get_share_state",
     "load_shared_user",
+    "load_shared_user_by_username",
+    "profile_url",
+    "public_link",
     "public_map",
+    "public_map_by_username",
     "share_url",
 ]

@@ -14,8 +14,31 @@
 | 401 | нет/просрочен access-токен |
 | 403 | недостаточно прав (`"Недостаточно прав"`) |
 | 404 | объект не найден |
-| 409 | конфликт: дубликат slug, связь создаёт **цикл** в графе |
-| 422 | ошибка валидации тела/параметров, зависимость навыка от самого себя |
+| 409 | конфликт: дубликат slug (в т.ч. любое нарушение уникальности в БД), связь создаёт **цикл** в графе |
+| 422 | ошибка валидации тела/параметров, зависимость навыка от самого себя, выход за границы пагинации, не-http(s) URL ресурса |
+| 429 | внешний сервис (GitHub/Stepik) ограничил частоту запросов |
+| 502 / 503 | внешний сервис ответил ошибкой или недоступен |
+
+### Пагинация
+
+Все списки используют `limit` + `offset` с жёсткими границами (FastAPI отдаёт `422`
+при выходе за них). Границы — единый источник правды `app/api/pagination.py`.
+
+| Группа | `limit` | По умолчанию | `offset` |
+|--------|---------|--------------|----------|
+| `/professions` (публичный каталог) | 1..50 | 20 | 0..10000 |
+| `/admin/professions`, `/admin/skills`, `/admin/dependencies`, `/admin/resources` | 1..200 | 50 | 0..10000 |
+
+Сервисы дополнительно «подрезают» параметры (`clamp_page`), поэтому даже внутренний
+вызов не может запросить больше 200 записей за раз.
+
+### Конфликты и целостность
+
+`409` на дубликат выдаётся в двух местах: сервис (`_commit` в `app/services/admin.py`)
+отлавливает `IntegrityError`, откатывает транзакцию и возвращает понятное сообщение, а
+глобальный обработчик в `app/main.py` страхует всё, что проскочило мимо сервисов.
+Фронт может рассчитывать на `409`, а не на `500`.
+
 
 ## Auth
 
@@ -36,7 +59,7 @@
 
 | Method | Path | Описание |
 |--------|------|----------|
-| GET | `/professions` | каталог: `q`, `direction`, `limit`, `offset` |
+| GET | `/professions` | каталог: `q`, `direction`, `limit` (1..50, по умолчанию 20), `offset` |
 | GET | `/professions/directions` | список направлений (для фильтра) |
 | GET | `/professions/{profession_id}` | детали профессии |
 | GET | `/professions/{profession_id}/map` | узлы + рёбра + ресурсы для React Flow; для авторизованного пользователя узлы содержат `user_status`, `self_score`, `locked` |
@@ -63,11 +86,74 @@
 | DELETE | `/me/share` | отключить и удалить токен |
 | GET | `/me/export` | данные для клиентского рендера PDF |
 
+### Импорт навыков (Should, неделя 5)
+
+Импорт двухшаговый: сначала `preview` показывает подсказки с доказательствами,
+затем `apply` записывает **только выбранные** навыки. `preview` ничего не меняет,
+поэтому импорт не может незаметно переписать прогресс онбординга.
+
+| Method | Path | Описание |
+|--------|------|----------|
+| POST | `/me/import/github/preview` | `login` (можно с `@`), опционально `profession_id` |
+| POST | `/me/import/stepik/preview` | `course_ids` (1..50), опционально `profession_id` |
+| POST | `/me/import/apply` | `skill_ids` (1..100), `source` (`github`/`stepik`), `self_score` |
+
+```json
+{
+  "source": "github",
+  "account": "octocat",
+  "total_signals": 7,
+  "suggestions": [
+    {
+      "skill_id": "…",
+      "slug": "py-basics",
+      "title": "Основы Python",
+      "confidence": 0.85,
+      "evidence": [
+        { "source": "github", "title": "Python", "url": "https://github.com/octocat", "confidence": 0.85 }
+      ]
+    }
+  ],
+  "unmatched": ["Go"],
+  "already_mastered": ["git-cli"]
+}
+```
+
+Ответ `apply`:
+
+```json
+{
+  "source": "github",
+  "applied": [{ "skill_id": "…", "slug": "py-basics" }],
+  "total_mastered": 7
+}
+```
+
+Особенности:
+
+- `preview` без выбранной профессии сопоставляет со **всеми** навыками; с
+  `profession_id` (или целью пользователя) — только с навыками этой профессии.
+- `unmatched` — сигналы, которым не нашлось навыка. Показываются пользователю как
+  есть; ничего не подставляется угадыванием (например, язык `Go` в контенте
+  отсутствует и остаётся в `unmatched`).
+- Уверенность считается по схеме noisy-OR (`1 - Π(1 - c_i)`), поэтому несколько
+  независимых сигналов по одному навыку дают больший вес.
+- `apply` идемпотентен: повторный вызов не создаёт дубликатов, `UserSkill.source`
+  фиксирует происхождение навыка (`github`/`stepik`, `null` — вручную).
+- GitHub читается из публичного API (без токена). Если задан
+  `GITHUB_IMPORT_TOKEN`, лимит поднимается с 60 до 5000 запросов в час.
+  При превышении лимита — `429 "GitHub ограничил частоту запросов…"`.
+- `404` — профиль GitHub или курсы Stepik не найдены; `503` — сервис недоступен.
+
+Маппинг — `app/services/import_mapping.py` (чистые функции, без сети), запросы —
+`app/services/importers.py`, роуты — `app/api/v1/endpoints/imports.py`.
+
 ## Public (без auth)
 
 | Method | Path | Описание |
 |--------|------|----------|
-| GET | `/public/{token}` | read-only карта + Gap + план (без email и служебных полей) |
+| GET | `/public/u/{username}` | read-only карта + Gap + план по имени пользователя (**каноническая** ссылка) |
+| GET | `/public/{token}` | то же по legacy-токену (ссылки, выданные ранее) |
 
 ## Admin (editor/admin)
 
@@ -100,7 +186,7 @@
 
 | Method | Path | Описание |
 |--------|------|----------|
-| GET | `/admin/dependencies` | `skill_id`, `limit` (1..500, по умолчанию 200), `offset` |
+| GET | `/admin/dependencies` | `skill_id`, `limit` (1..200, по умолчанию 50), `offset` |
 | GET | `/admin/dependencies/validate` | проверка всего графа на циклы (диагностика): `200 {"detail": "Циклов не найдено"}` или `409` |
 | POST | `/admin/dependencies` | создать связь `prerequisite_id → skill_id` |
 | PATCH | `/admin/dependencies/{dependency_id}` | изменить связь (перепроверка только при смене концов) |
@@ -121,7 +207,8 @@
 
 | Method | Path | Описание |
 |--------|------|----------|
-| GET | `/admin/resources` | `skill_id`, `limit` (1..500), `offset` |
+| GET | `/admin/resources` | `skill_id`, `limit` (1..200, по умолчанию 50), `offset` |
+| POST | `/admin/resources/check-links` | пакетная проверка доступности ссылок (`limit` из той же шкалы) |
 | POST | `/admin/resources` | создать ресурс для навыка |
 | PATCH | `/admin/resources/{resource_id}` | частичное обновление |
 | DELETE | `/admin/resources/{resource_id}` | удалить |
@@ -129,12 +216,34 @@
 Типы ресурсов: `course`, `book`, `project`, `article`, `video`, `docs`.
 Поле `lang` (`ru`/`en`, по умолчанию `ru`) добавлено в неделю 4 — миграция `0006`.
 
+**Валидация URL.** `url` ресурса проверяется на схему `http`/`https` (тип
+`ResourceUrl` в `app/schemas/admin.py`). Значения вида `javascript:…` или пустая
+строка отклоняются с `422`, а не роняют редактор в `500`.
+
 ## Что сознательно не реализовано
 
-- **Импорт GitHub / Stepik** — приоритет *Should*: делается после стабилизации MVP,
-  эндпоинтов в этой итерации нет.
 - Смена цели и удаление аккаунта — *Should*.
 - Фильтры карты, бейджи, напоминания, шаринг в соцсети — вне MVP.
+
+## Контент профессий (неделя 5)
+
+Контент живёт в `apps/backend/data/skillmap_content.json` и загружается
+`app/scripts/seed.py`. Перед записью в БД выполняется валидация
+(`app/services/content_validation.py`): дубликаты slug, неизвестные профессии и
+навыки, циклы в зависимостях, навыки без ресурсов и т.п. При ошибке сид падает с
+отчётом и **ничего не пишет**.
+
+Отдельный CLI для аналитика (не требует БД):
+
+```bash
+uv run python -m app.scripts.validate_content            # отчёт по data/skillmap_content.json
+uv run python -m app.scripts.validate_content --json     # машиночитаемо для CI
+uv run python -m app.scripts.validate_content --warnings-as-errors
+```
+
+Код возврата `1` — есть ошибки. Повторный сид не разрушает ручные правки в админке:
+`status`/`entry_level` профессий, `is_core` связей и `status` ресурсов
+выставляются только для новых записей.
 
 ## Примеры ответов (схематично)
 
@@ -257,21 +366,27 @@
 ```json
 {
   "enabled": true,
+  "username": "anna",
   "token": "9f3…",
+  "profile_url": "https://app.example.ru/u/anna",
   "url": "https://app.example.ru/public/9f3…",
   "shared_at": "2026-11-20T10:00:00Z"
 }
 ```
 
-`POST /me/share` идемпотентен: при повторном вызове возвращает существующий токен.
+`POST /me/share` идемпотентен: при повторном вызове возвращает существующую ссылку.
 Без выбранной профессии → `409 "Сначала выберите профессию — без неё делиться нечем"`.
-`DELETE /me/share` → `{ "enabled": false, "token": null, "url": null, "shared_at": null }`.
-`GET /public/{token}` при отключённой или несуществующей ссылке → `404 "Ссылка не найдена"`.
-URL строится от `settings.frontend_url` → `{base}/public/{token}`.
+`DELETE /me/share` → `{ "enabled": false, "username": null, "token": null, "profile_url": null, "url": null, "shared_at": null }`.
+`GET /public/u/{username}` при отключённой ссылке → `404 "Ссылка не найдена"`.
 
-### Public map (`/public/{token}`)
+**Каноническая ссылка — `/u/{username}`** (`profile_url`): она человекочитаемая и
+не ломается при перевыпуске токена. `url` (`/public/{token}`) остаётся для
+совместимости со ссылками, выданными ранее. Обе строятся от `settings.frontend_url`.
+
+### Public map (`/public/u/{username}`, `/public/{token}`)
 ```json
 {
+  "username": "anna",
   "owner_name": "Анна",
   "owner_level": "junior",
   "profession_id": "…",
@@ -298,7 +413,7 @@ PDF рендерит **фронт**; бэкенд отдаёт один агре
 
 ```json
 {
-  "meta": { "app": "SkillMap", "version": "2026-11-w4", "generated_at": "…", "share_url": "https://…/public/9f3…" },
+  "meta": { "app": "SkillMap", "version": "2026-11-w5", "generated_at": "…", "share_url": "https://…/u/anna" },
   "user": { "name": "Анна", "email": "anna@example.ru", "level": "junior", "hours_per_week": 6, "target_profession_title": "Data Scientist" },
   "profession": { "…": "ProfessionDetail" },
   "map": { "…": "ProfessionMapResponse" },
@@ -309,6 +424,10 @@ PDF рендерит **фронт**; бэкенд отдаёт один агре
 ```
 
 Если цель не выбрана и `profession_id` не передан → `409 "Сначала выберите профессию"`.
+
+`meta.version` — версия контракта экспорта, текущая `2026-11-w5`. Фронт сверяет её,
+чтобы PDF не поехал при изменении схемы. `meta.share_url` — `null`, пока публичная
+ссылка не включена, иначе канонический `/u/{username}`.
 
 ---
 

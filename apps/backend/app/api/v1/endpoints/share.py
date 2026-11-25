@@ -55,7 +55,13 @@ async def export_my_data(
     db: DbSession,
     user: CurrentUser,
     profession_id: Annotated[
-        uuid.UUID | None, Query(description="По умолчанию — цель пользователя")
+        uuid.UUID | None,
+        Query(
+            description=(
+                "По умолчанию — цель пользователя. "
+                "Фронтенд присылает snake_case (axios-case-converter)."
+            )
+        ),
     ] = None,
 ) -> ExportPayload:
     """Агрегированный срез профиля для PDF-экспорта на фронте."""

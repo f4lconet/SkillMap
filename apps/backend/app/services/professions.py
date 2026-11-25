@@ -1,6 +1,7 @@
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.pagination import PUBLIC_MAX_LIMIT, clamp_page
 from app.models import Profession, ProfessionStatus
 
 
@@ -11,6 +12,7 @@ def _escape_like(value: str) -> str:
 async def list_professions(
     db: AsyncSession, q: str | None, direction: str | None, limit: int, offset: int
 ) -> tuple[list[Profession], int]:
+    page = clamp_page(limit, offset, max_limit=PUBLIC_MAX_LIMIT)
     stmt = select(Profession).where(Profession.status == ProfessionStatus.PUBLISHED)
     if q:
         pattern = f"%{_escape_like(q.strip())}%"
@@ -24,7 +26,9 @@ async def list_professions(
         stmt = stmt.where(Profession.direction == direction)
 
     total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
-    rows = await db.scalars(stmt.order_by(Profession.title).limit(limit).offset(offset))
+    rows = await db.scalars(
+        stmt.order_by(Profession.title).limit(page.limit).offset(page.offset)
+    )
     return list(rows), total or 0
 
 

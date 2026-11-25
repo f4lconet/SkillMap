@@ -20,6 +20,7 @@ from app.models import (
     SkillDependency,
 )
 from app.models.base import utcnow
+from app.services.content_validation import ContentValidationError, validate_content
 
 ContentData = dict[str, Any]
 
@@ -35,8 +36,21 @@ def load_content_data(path: Path | None = None) -> ContentData:
     return json.loads(target.read_text(encoding="utf-8"))
 
 
-async def load_content(db: AsyncSession, data: ContentData) -> dict[str, int]:
-    """Идемпотентно загружает контент: повторный вызов не плодит дубли."""
+async def load_content(
+    db: AsyncSession, data: ContentData, *, strict: bool = True
+) -> dict[str, int]:
+    """Идемпотентно загружает контент: повторный вызов не плодит дубли.
+
+    При ``strict=True`` контент сначала проходит структурные проверки
+    (см. :mod:`app.services.content_validation`): битые ссылки и циклы в графе
+    падают до записи в БД, а не после.
+    """
+    if strict:
+        issues = validate_content(data)
+        errors = [i for i in issues if i.level == "error"]
+        if errors:
+            raise ContentValidationError(issues)
+
     # 1. Directions
     for d in data.get("directions", []):
         row = await db.get(Direction, d["id"])
@@ -69,6 +83,7 @@ async def load_content(db: AsyncSession, data: ContentData) -> dict[str, int]:
         profession = await db.scalar(
             select(Profession).where(Profession.slug == p["slug"])
         )
+        is_new = profession is None
         if profession is None:
             profession = Profession(slug=p["slug"])
             db.add(profession)
@@ -85,8 +100,11 @@ async def load_content(db: AsyncSession, data: ContentData) -> dict[str, int]:
         profession.is_priority = bool(p.get("is_priority", False))
         profession.skills_count = int(p.get("skills_count", 0))
         profession.skills_ready = bool(p.get("skills_ready", False))
-        profession.status = ProfessionStatus.PUBLISHED
-        profession.entry_level = Level.BEGINNER
+        if is_new:
+            # Новую профессию из контента публикуем сразу; правки статуса,
+            # сделанные в админке, повторный seed не перетирает.
+            profession.status = ProfessionStatus.PUBLISHED
+            profession.entry_level = Level.BEGINNER
     await db.flush()
 
     # 4. Profession ↔ Skill: состав берём из skills[].professions
@@ -116,8 +134,8 @@ async def load_content(db: AsyncSession, data: ContentData) -> dict[str, int]:
                     profession_id=profession.id, skill_id=skill.id
                 )
                 db.add(link)
+                link.is_core = True
             link.position = pos
-            link.is_core = True
         profession.skills_count = len(skill_slugs)
 
     # 5. Dependencies
@@ -164,6 +182,9 @@ async def load_content(db: AsyncSession, data: ContentData) -> dict[str, int]:
         if row is None:
             row = Resource(skill_id=skill.id, title=title)
             db.add(row)
+            # Контент аналитика сразу публикуется: черновики — удел правок
+            # в админке, и повторный seed их не трогает.
+            row.status = "published"
         row.url = url
         row.resource_type = res.get("type") or "course"
         row.provider = (res.get("provider") or "")[:100]
@@ -172,8 +193,6 @@ async def load_content(db: AsyncSession, data: ContentData) -> dict[str, int]:
         row.estimated_hours = res.get("hours")
         row.position = positions.get(res["skill_id"], 0)
         positions[res["skill_id"]] = row.position + 1
-        # Контент аналитика сразу публикуется: черновики — удел правок в админке
-        row.status = "published"
         row.published_at = row.published_at or utcnow()
 
     await db.flush()

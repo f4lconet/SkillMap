@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import DbSession
+from app.api.pagination import DEFAULT_PUBLIC_LIMIT, OffsetQuery, PublicLimitQuery
 from app.models import Profession, ProfessionStatus
 from app.schemas.profession import ProfessionDetail, ProfessionList
 from app.services import professions as professions_service
@@ -16,8 +17,8 @@ async def list_professions(
     db: DbSession,
     q: Annotated[str | None, Query(max_length=100)] = None,
     direction: Annotated[str | None, Query(max_length=100)] = None,
-    limit: Annotated[int, Query(ge=1, le=50)] = 20,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: PublicLimitQuery = DEFAULT_PUBLIC_LIMIT,
+    offset: OffsetQuery = 0,
 ):
     items, total = await professions_service.list_professions(db, q, direction, limit, offset)
     return ProfessionList(items=items, total=total, limit=limit, offset=offset)

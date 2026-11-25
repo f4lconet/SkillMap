@@ -10,9 +10,11 @@ from urllib.parse import urlparse
 import httpx
 from fastapi import HTTPException, status
 from sqlalchemy import case, distinct, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.pagination import clamp_page
 from app.models import (
     DependencyType,
     Direction,
@@ -56,6 +58,20 @@ NOT_FOUND_DEPENDENCY = "Связь не найдена"
 
 def _conflict(detail: str) -> HTTPException:
     return HTTPException(status.HTTP_409_CONFLICT, detail)
+
+
+async def _commit(db: AsyncSession, on_conflict: str) -> None:
+    """Коммит, который переводит гонку по уникальному ключу в 409, а не в 500.
+
+    Проверки `_ensure_*_slug_free` работают по схеме «прочитал — записал»:
+    два редактора могут пройти проверку одновременно и столкнуться уже
+    на вставке. Без этого перехвата пользователь видел 500.
+    """
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise _conflict(on_conflict) from exc
 
 
 def _escape_like(value: str) -> str:
@@ -112,11 +128,12 @@ async def list_professions(
         )
     if status_filter:
         stmt = stmt.where(Profession.status == status_filter)
+    page = clamp_page(limit, offset)
     total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
     rows = await db.scalars(
         stmt.order_by(Profession.is_priority.desc(), Profession.title)
-        .limit(limit)
-        .offset(offset)
+        .limit(page.limit)
+        .offset(page.offset)
     )
     return list(rows), total or 0
 
@@ -128,7 +145,7 @@ async def create_profession(
     await _ensure_direction_exists(db, data.direction_id)
     profession = Profession(**data.model_dump())
     db.add(profession)
-    await db.commit()
+    await _commit(db, "Профессия с таким slug уже существует")
     await db.refresh(profession)
     return profession
 
@@ -144,7 +161,7 @@ async def update_profession(
         await _ensure_direction_exists(db, changes["direction_id"])
     for field, value in changes.items():
         setattr(profession, field, value)
-    await db.commit()
+    await _commit(db, "Профессия с таким slug уже существует")
     await db.refresh(profession)
     return profession
 
@@ -274,9 +291,10 @@ async def list_skills(
         )
     if category:
         stmt = stmt.where(Skill.category == category)
+    page = clamp_page(limit, offset)
     total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
     rows = await db.scalars(
-        stmt.order_by(Skill.slug).limit(limit).offset(offset)
+        stmt.order_by(Skill.slug).limit(page.limit).offset(page.offset)
     )
     return list(rows), total or 0
 
@@ -285,7 +303,7 @@ async def create_skill(db: AsyncSession, data: SkillAdminCreate) -> Skill:
     await _ensure_skill_slug_free(db, data.slug)
     skill = Skill(**data.model_dump())
     db.add(skill)
-    await db.commit()
+    await _commit(db, "Навык с таким slug уже существует")
     await db.refresh(skill)
     return skill
 
@@ -303,7 +321,7 @@ async def update_skill(
         await _ensure_skill_slug_free(db, changes["slug"], skill_id)
     for field, value in changes.items():
         setattr(skill, field, value)
-    await db.commit()
+    await _commit(db, "Навык с таким slug уже существует")
     await db.refresh(skill)
     return skill
 
@@ -369,9 +387,12 @@ async def list_dependencies(
             )
         )
     total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
+    page = clamp_page(limit, offset)
     rows = list(
         await db.scalars(
-            stmt.order_by(SkillDependency.created_at).limit(limit).offset(offset)
+            stmt.order_by(SkillDependency.created_at)
+            .limit(page.limit)
+            .offset(page.offset)
         )
     )
     return await to_dependency_read(db, rows), total or 0
@@ -417,7 +438,7 @@ async def create_dependency(
         dep_type=data.dep_type,
     )
     db.add(dep)
-    await db.commit()
+    await _commit(db, "Такая связь уже есть")
     await db.refresh(dep)
     return (await to_dependency_read(db, [dep]))[0]
 
@@ -452,7 +473,7 @@ async def update_dependency(
     dep.skill_id = skill_id
     dep.prerequisite_id = prerequisite_id
     dep.dep_type = dep_type
-    await db.commit()
+    await _commit(db, "Такая связь уже есть")
     await db.refresh(dep)
     return (await to_dependency_read(db, [dep]))[0]
 
@@ -614,13 +635,14 @@ async def list_resources(
     total = await db.scalar(select(func.count(Resource.id)).where(*conditions))
     column = RESOURCE_SORT_COLUMNS.get(sort_by, Skill.title)
     order = column.desc() if sort_dir == "desc" else column.asc()
+    page = clamp_page(limit, offset)
     rows = await db.execute(
         select(Resource, Skill.slug, Skill.title)
         .join(Skill, Skill.id == Resource.skill_id)
         .where(*conditions)
         .order_by(order, Resource.skill_id, Resource.position)
-        .limit(limit)
-        .offset(offset)
+        .limit(page.limit)
+        .offset(page.offset)
     )
     return [to_resource_read(r, slug, title) for r, slug, title in rows], total or 0
 
@@ -808,7 +830,7 @@ async def check_resource_links(
             select(Resource)
             .where(*conditions)
             .order_by(Resource.updated_at.desc())
-            .limit(limit)
+            .limit(clamp_page(limit, 0).limit)
         )
     )
     if not rows:

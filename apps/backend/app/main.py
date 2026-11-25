@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
+from sqlalchemy.exc import IntegrityError
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
@@ -40,6 +41,35 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     )
 
 
+def _cors_headers(request: Request) -> dict[str, str]:
+    """CORS-заголовки для ответов, собранных в обход CORSMiddleware."""
+    headers: dict[str, str] = {}
+    origin = request.headers.get("origin")
+    if origin and origin in settings.cors_origins:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Vary"] = "Origin"
+    return headers
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: IntegrityError):
+    """Гонка по уникальному ключу — конфликт данных (409), а не падение сервера.
+
+    Проверки вида «slug уже занят?» работают по схеме «прочитал — записал»,
+    поэтому два параллельных запроса редакторов могут пройти проверку и
+    столкнуться уже на вставке. Раньше такой пользователь получал 500.
+    """
+    logger.warning(
+        "IntegrityError on %s %s: %s", request.method, request.url.path, exc.orig
+    )
+    return JSONResponse(
+        status_code=409,
+        content={"detail": "Конфликт данных: такая запись уже существует"},
+        headers=_cors_headers(request),
+    )
+
+
 @app.exception_handler(Exception)
 async def unhandled_error_handler(request: Request, exc: Exception):
     """500 отдаёт внешний ServerErrorMiddleware — CORS-заголовки ставим вручную.
@@ -48,16 +78,10 @@ async def unhandled_error_handler(request: Request, exc: Exception):
     «network error» вместо реальной ошибки сервера.
     """
     logger.exception("Unhandled error on %s %s", request.method, request.url.path)
-    headers: dict[str, str] = {}
-    origin = request.headers.get("origin")
-    if origin and origin in settings.cors_origins:
-        headers["Access-Control-Allow-Origin"] = origin
-        headers["Access-Control-Allow-Credentials"] = "true"
-        headers["Vary"] = "Origin"
     return JSONResponse(
         status_code=500,
         content={"detail": "Внутренняя ошибка сервера"},
-        headers=headers,
+        headers=_cors_headers(request),
     )
 
 
