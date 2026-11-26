@@ -8,19 +8,24 @@ import type {
   AdminProfessionCreate,
   AdminProfessionGraph,
   AdminProfessionList,
+  AdminProfessionListParams,
   AdminProfessionPreview,
   AdminProfessionUpdate,
   AdminPublishResult,
   AdminSkillList,
   AdminSkillPatch,
+  BrokenDependencyList,
+  BrokenDependencyListParams,
   DependencyType,
 } from '../model/types';
 
 export const adminGraphApi = {
   /** GET /admin/professions */
-  listProfessions(limit = 100): Promise<AdminProfessionList> {
+  listProfessions(
+    params: AdminProfessionListParams = {}
+  ): Promise<AdminProfessionList> {
     return api.get<AdminProfessionList>('/admin/professions', {
-      params: { limit },
+      params: { limit: 100, ...params },
     });
   },
 
@@ -145,6 +150,15 @@ export const adminGraphApi = {
   /** GET /admin/dependencies/validate — проверка графа на циклы. */
   validateGraph(): Promise<AdminMessage> {
     return api.get<AdminMessage>('/admin/dependencies/validate');
+  },
+
+  /** GET /admin/dependencies/broken — связи, невидимые на карте профессии. */
+  listBrokenDependencies(
+    params: BrokenDependencyListParams = {}
+  ): Promise<BrokenDependencyList> {
+    return api.get<BrokenDependencyList>('/admin/dependencies/broken', {
+      params,
+    });
   },
 
   /** GET /admin/skills — справочник навыков (для выпадающих списков). */

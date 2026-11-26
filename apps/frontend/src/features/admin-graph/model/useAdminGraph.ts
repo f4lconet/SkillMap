@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -174,7 +174,7 @@ export function useAdminGraph(): AdminGraphEditor {
     setLoading(true);
     setError(null);
     try {
-      const data = await adminGraphApi.listProfessions(200);
+      const data = await adminGraphApi.listProfessions({ limit: 200 });
       setProfessions(data.items);
       setProfessionId((prev) => {
         if (prev && data.items.some((item) => item.id === prev)) return prev;

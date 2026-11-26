@@ -19,7 +19,13 @@ from app.api.pagination import (
     OffsetQuery,
 )
 from app.models import ProfessionStatus, UserRole
+from app.models.enums import Level
 from app.schemas.admin import (
+    AdminAction,
+    AdminEntityType,
+    AdminEventList,
+    AdminOverviewRead,
+    BrokenDependencyList,
     DependencyCreate,
     DependencyList,
     DependencyRead,
@@ -40,6 +46,7 @@ from app.schemas.admin import (
     ResourceAdminRead,
     ResourceAdminUpdate,
     ResourceLinkCheckResult,
+    ResourceLinkStatus,
     ResourceSortField,
     ResourceStats,
     ResourceStatus,
@@ -102,6 +109,47 @@ async def ping() -> dict[str, str]:
     return {"detail": "pong"}
 
 
+@router.get(
+    "/overview",
+    response_model=AdminOverviewRead,
+    summary="Сводка для стартовой страницы админки",
+)
+async def get_overview(
+    db: DbSession,
+    profession_id: Annotated[uuid.UUID | None, Query()] = None,
+    recent_limit: Annotated[int, Query(ge=0, le=50)] = 5,
+):
+    return await admin_service.get_admin_overview(
+        db, profession_id=profession_id, recent_limit=recent_limit
+    )
+
+
+@router.get(
+    "/history",
+    response_model=AdminEventList,
+    summary="Журнал изменений контента (кто, что, когда)",
+)
+async def list_history(
+    db: DbSession,
+    profession_id: Annotated[uuid.UUID | None, Query()] = None,
+    skill_id: Annotated[uuid.UUID | None, Query()] = None,
+    entity_type: Annotated[AdminEntityType | None, Query()] = None,
+    action_filter: Annotated[AdminAction | None, Query(alias="action")] = None,
+    limit: LimitQuery = DEFAULT_ADMIN_LARGE_LIMIT,
+    offset: OffsetQuery = 0,
+):
+    items, total = await admin_service.list_history(
+        db,
+        profession_id=profession_id,
+        skill_id=skill_id,
+        entity_type=entity_type,
+        action=action_filter,
+        limit=limit,
+        offset=offset,
+    )
+    return AdminEventList(items=items, total=total, limit=limit, offset=offset)
+
+
 # ------------------------------- Профессии ---------------------------------
 
 
@@ -110,6 +158,7 @@ async def list_professions(
     db: DbSession,
     q: Annotated[str | None, Query(max_length=100)] = None,
     status_filter: Annotated[ProfessionStatus | None, Query(alias="status")] = None,
+    entry_level: Annotated[Level | None, Query()] = None,
     limit: LimitQuery = DEFAULT_ADMIN_LIMIT,
     offset: OffsetQuery = 0,
 ):
@@ -117,6 +166,7 @@ async def list_professions(
         db,
         q=q,
         status_filter=status_filter.value if status_filter else None,
+        entry_level=entry_level.value if entry_level else None,
         limit=limit,
         offset=offset,
     )
@@ -133,8 +183,10 @@ async def list_professions(
     response_model=ProfessionAdminRead,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_profession(data: ProfessionAdminCreate, db: DbSession):
-    profession = await admin_service.create_profession(db, data)
+async def create_profession(
+    data: ProfessionAdminCreate, db: DbSession, user: CurrentUser
+):
+    profession = await admin_service.create_profession(db, data, actor=user)
     return ProfessionAdminRead.model_validate(profession)
 
 
@@ -146,15 +198,22 @@ async def get_profession(profession_id: uuid.UUID, db: DbSession):
 
 @router.patch("/professions/{profession_id}", response_model=ProfessionAdminRead)
 async def update_profession(
-    profession_id: uuid.UUID, data: ProfessionAdminUpdate, db: DbSession
+    profession_id: uuid.UUID,
+    data: ProfessionAdminUpdate,
+    db: DbSession,
+    user: CurrentUser,
 ):
-    profession = await admin_service.update_profession(db, profession_id, data)
+    profession = await admin_service.update_profession(
+        db, profession_id, data, actor=user
+    )
     return ProfessionAdminRead.model_validate(profession)
 
 
 @router.delete("/professions/{profession_id}", response_model=MessageResponse)
-async def delete_profession(profession_id: uuid.UUID, db: DbSession):
-    await admin_service.delete_profession(db, profession_id)
+async def delete_profession(
+    profession_id: uuid.UUID, db: DbSession, user: CurrentUser
+):
+    await admin_service.delete_profession(db, profession_id, actor=user)
     return MessageResponse(detail="Профессия удалена")
 
 
@@ -171,9 +230,14 @@ async def list_profession_skills(profession_id: uuid.UUID, db: DbSession):
     response_model=list[ProfessionSkillLinkRead],
 )
 async def replace_profession_skills(
-    profession_id: uuid.UUID, data: ProfessionSkillsReplace, db: DbSession
+    profession_id: uuid.UUID,
+    data: ProfessionSkillsReplace,
+    db: DbSession,
+    user: CurrentUser,
 ):
-    await admin_service.replace_profession_skills(db, profession_id, data.skills)
+    await admin_service.replace_profession_skills(
+        db, profession_id, data.skills, actor=user
+    )
     return await _profession_skills(db, profession_id)
 
 
@@ -196,9 +260,14 @@ async def get_profession_graph(profession_id: uuid.UUID, db: DbSession):
     summary="Создать навык и сразу добавить его в профессию",
 )
 async def create_profession_skill(
-    profession_id: uuid.UUID, data: GraphSkillCreate, db: DbSession
+    profession_id: uuid.UUID,
+    data: GraphSkillCreate,
+    db: DbSession,
+    user: CurrentUser,
 ):
-    skill = await admin_service.upsert_graph_skill(db, profession_id, data)
+    skill = await admin_service.upsert_graph_skill(
+        db, profession_id, data, actor=user
+    )
     return await _skill_read(db, skill.id)
 
 
@@ -236,8 +305,10 @@ async def preview_profession(profession_id: uuid.UUID, db: DbSession):
     response_model=MessageResponse,
     summary="Сбросить ручные координаты всех узлов профессии",
 )
-async def reset_profession_layout(profession_id: uuid.UUID, db: DbSession):
-    count = await admin_service.reset_profession_layout(db, profession_id)
+async def reset_profession_layout(
+    profession_id: uuid.UUID, db: DbSession, user: CurrentUser
+):
+    count = await admin_service.reset_profession_layout(db, profession_id, actor=user)
     return MessageResponse(detail=f"Раскладка сброшена для {count} навыков")
 
 
@@ -283,8 +354,10 @@ async def list_skills(
 @router.post(
     "/skills", response_model=SkillAdminRead, status_code=status.HTTP_201_CREATED
 )
-async def create_skill(data: SkillAdminCreate, db: DbSession):
-    skill = await admin_service.create_skill(db, data)
+async def create_skill(
+    data: SkillAdminCreate, db: DbSession, user: CurrentUser
+):
+    skill = await admin_service.create_skill(db, data, actor=user)
     return await _skill_read(db, skill.id)
 
 
@@ -294,14 +367,16 @@ async def get_skill(skill_id: uuid.UUID, db: DbSession):
 
 
 @router.patch("/skills/{skill_id}", response_model=SkillAdminRead)
-async def update_skill(skill_id: uuid.UUID, data: SkillAdminUpdate, db: DbSession):
-    await admin_service.update_skill(db, skill_id, data)
+async def update_skill(
+    skill_id: uuid.UUID, data: SkillAdminUpdate, db: DbSession, user: CurrentUser
+):
+    await admin_service.update_skill(db, skill_id, data, actor=user)
     return await _skill_read(db, skill_id)
 
 
 @router.delete("/skills/{skill_id}", response_model=MessageResponse)
-async def delete_skill(skill_id: uuid.UUID, db: DbSession):
-    await admin_service.delete_skill(db, skill_id)
+async def delete_skill(skill_id: uuid.UUID, db: DbSession, user: CurrentUser):
+    await admin_service.delete_skill(db, skill_id, actor=user)
     return MessageResponse(detail="Навык удалён")
 
 
@@ -341,25 +416,53 @@ async def validate_graph(db: DbSession):
     return MessageResponse(detail="Циклов не найдено")
 
 
+@router.get(
+    "/dependencies/broken",
+    response_model=BrokenDependencyList,
+    summary="Связи, невидимые на карте (второй конец вне профессии / вне всех карт)",
+)
+async def list_broken_dependencies(
+    db: DbSession,
+    profession_id: Annotated[uuid.UUID | None, Query()] = None,
+    limit: LimitQuery = DEFAULT_ADMIN_LARGE_LIMIT,
+    offset: OffsetQuery = 0,
+):
+    items, total = await admin_service.list_broken_dependencies(
+        db, profession_id=profession_id, limit=limit, offset=offset
+    )
+    return BrokenDependencyList(
+        items=items, total=total, limit=limit, offset=offset
+    )
+
+
 @router.post(
     "/dependencies",
     response_model=DependencyRead,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_dependency(data: DependencyCreate, db: DbSession):
-    return await admin_service.create_dependency(db, data)
+async def create_dependency(
+    data: DependencyCreate, db: DbSession, user: CurrentUser
+):
+    return await admin_service.create_dependency(db, data, actor=user)
 
 
 @router.patch("/dependencies/{dependency_id}", response_model=DependencyRead)
 async def update_dependency(
-    dependency_id: uuid.UUID, data: DependencyUpdate, db: DbSession
+    dependency_id: uuid.UUID,
+    data: DependencyUpdate,
+    db: DbSession,
+    user: CurrentUser,
 ):
-    return await admin_service.update_dependency(db, dependency_id, data)
+    return await admin_service.update_dependency(
+        db, dependency_id, data, actor=user
+    )
 
 
 @router.delete("/dependencies/{dependency_id}", response_model=MessageResponse)
-async def delete_dependency(dependency_id: uuid.UUID, db: DbSession):
-    await admin_service.delete_dependency(db, dependency_id)
+async def delete_dependency(
+    dependency_id: uuid.UUID, db: DbSession, user: CurrentUser
+):
+    await admin_service.delete_dependency(db, dependency_id, actor=user)
     return MessageResponse(detail="Связь удалена")
 
 
@@ -376,6 +479,7 @@ async def list_resources(
     lang: Annotated[str | None, Query(max_length=8)] = None,
     is_free: Annotated[bool | None, Query()] = None,
     status_filter: Annotated[ResourceStatus | None, Query(alias="status")] = None,
+    link_status: Annotated[ResourceLinkStatus | None, Query()] = None,
     sort_by: Annotated[ResourceSortField, Query()] = "skill",
     sort_dir: Annotated[SortDirection, Query()] = "asc",
     limit: LimitQuery = DEFAULT_ADMIN_LARGE_LIMIT,
@@ -390,6 +494,7 @@ async def list_resources(
         lang=lang,
         is_free=is_free,
         status_filter=status_filter,
+        link_status=link_status,
         sort_by=sort_by,
         sort_dir=sort_dir,
         limit=limit,
@@ -409,6 +514,7 @@ async def get_resource_stats(
 @router.post("/resources/check-links", response_model=ResourceLinkCheckResult)
 async def check_resource_links(
     db: DbSession,
+    user: CurrentUser,
     profession_id: Annotated[uuid.UUID | None, Query()] = None,
     skill_id: Annotated[uuid.UUID | None, Query()] = None,
     only_unchecked: Annotated[bool, Query()] = False,
@@ -420,6 +526,7 @@ async def check_resource_links(
         skill_id=skill_id,
         only_unchecked=only_unchecked,
         limit=limit,
+        actor=user,
     )
     return ResourceLinkCheckResult(
         checked=len(rows),
@@ -439,36 +546,51 @@ async def get_resource(resource_id: uuid.UUID, db: DbSession):
     response_model=ResourceAdminRead,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_resource(data: ResourceAdminCreate, db: DbSession):
-    resource = await admin_service.create_resource(db, data)
+async def create_resource(
+    data: ResourceAdminCreate, db: DbSession, user: CurrentUser
+):
+    resource = await admin_service.create_resource(db, data, actor=user)
     return (await admin_service.to_resource_reads(db, [resource]))[0]
 
 
 @router.patch("/resources/{resource_id}", response_model=ResourceAdminRead)
 async def update_resource(
-    resource_id: uuid.UUID, data: ResourceAdminUpdate, db: DbSession
+    resource_id: uuid.UUID,
+    data: ResourceAdminUpdate,
+    db: DbSession,
+    user: CurrentUser,
 ):
-    resource = await admin_service.update_resource(db, resource_id, data)
+    resource = await admin_service.update_resource(
+        db, resource_id, data, actor=user
+    )
     return (await admin_service.to_resource_reads(db, [resource]))[0]
 
 
 @router.post(
     "/resources/{resource_id}/publish", response_model=ResourceAdminRead
 )
-async def publish_resource(resource_id: uuid.UUID, db: DbSession):
-    resource = await admin_service.publish_resource(db, resource_id)
+async def publish_resource(
+    resource_id: uuid.UUID, db: DbSession, user: CurrentUser
+):
+    resource = await admin_service.publish_resource(db, resource_id, actor=user)
     return (await admin_service.to_resource_reads(db, [resource]))[0]
 
 
 @router.post(
     "/resources/{resource_id}/check-link", response_model=ResourceAdminRead
 )
-async def check_resource_link(resource_id: uuid.UUID, db: DbSession):
-    resource, _ = await admin_service.check_resource_link(db, resource_id)
+async def check_resource_link(
+    resource_id: uuid.UUID, db: DbSession, user: CurrentUser
+):
+    resource, _ = await admin_service.check_resource_link(
+        db, resource_id, actor=user
+    )
     return (await admin_service.to_resource_reads(db, [resource]))[0]
 
 
 @router.delete("/resources/{resource_id}", response_model=MessageResponse)
-async def delete_resource(resource_id: uuid.UUID, db: DbSession):
-    await admin_service.delete_resource(db, resource_id)
+async def delete_resource(
+    resource_id: uuid.UUID, db: DbSession, user: CurrentUser
+):
+    await admin_service.delete_resource(db, resource_id, actor=user)
     return MessageResponse(detail="Ресурс удалён")

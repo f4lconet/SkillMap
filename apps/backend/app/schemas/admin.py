@@ -110,6 +110,7 @@ class ProfessionAdminRead(BaseModel):
     published_at: datetime | None = None
     content_version: int = 1
     published_by_name: str = ""
+    draft_saved_at: datetime | None = None
 
 
 class ProfessionAdminList(BaseModel):
@@ -389,4 +390,99 @@ class ProfessionPreviewRead(BaseModel):
     content_version: int
     published_at: datetime | None = None
     map: ProfessionMapResponse
+
+
+# --------------------------------------------------------------------------
+# Журнал изменений, диагностика связей и сводка «Обзор» (неделя 6)
+# --------------------------------------------------------------------------
+
+AdminEntityType = Literal["profession", "skill", "dependency", "resource"]
+AdminAction = Literal["created", "updated", "deleted", "published", "checked"]
+
+
+class AdminEventRead(BaseModel):
+    """Строка ленты «Последние изменения»."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    created_at: datetime
+    actor_id: uuid.UUID | None = None
+    actor_name: str = ""
+    entity_type: AdminEntityType
+    entity_id: uuid.UUID | None = None
+    profession_id: uuid.UUID | None = None
+    skill_id: uuid.UUID | None = None
+    action: AdminAction
+    title: str
+    detail: str = ""
+
+
+class AdminEventList(BaseModel):
+    items: list[AdminEventRead]
+    total: int
+    limit: int
+    offset: int
+
+
+class BrokenDependencyRead(BaseModel):
+    """Связь, которую редактор не увидит на карте профессии."""
+
+    id: uuid.UUID
+    skill_id: uuid.UUID
+    skill_title: str
+    prerequisite_id: uuid.UUID
+    prerequisite_title: str
+    # outside_profession — второй конец вне профессии; orphan — связь не видна нигде
+    reason: Literal["outside_profession", "orphan"] = "orphan"
+    reason_text: str = ""
+
+
+class BrokenDependencyList(BaseModel):
+    items: list[BrokenDependencyRead]
+    total: int
+    limit: int
+    offset: int
+
+
+class OverviewStats(BaseModel):
+    """Плитки KPI на странице «Обзор»."""
+
+    skills: int = 0
+    dependencies: int = 0
+    resources: int = 0
+    attention: int = 0
+    required: int = 0
+    recommended: int = 0
+    layers: int = 0
+    published_resources: int = 0
+    draft_resources: int = 0
+    needs_review_resources: int = 0
+    broken_links: int = 0
+
+
+class OverviewChecklist(BaseModel):
+    """Три пункта чек-листа «Готовность к публикации»."""
+
+    graph_ready: bool = False
+    resources_ready: bool = False
+    links_ready: bool = False
+    skills_without_resources: int = 0
+    broken_dependencies: int = 0
+    unchecked_links: int = 0
+    cycle: list[str] = Field(default_factory=list)
+
+
+class AdminOverviewRead(BaseModel):
+    profession: ProfessionAdminRead | None = None
+    has_unpublished_changes: bool = False
+    stats: OverviewStats = Field(default_factory=OverviewStats)
+    checklist: OverviewChecklist = Field(default_factory=OverviewChecklist)
+    # Ресурсы, требующие внимания: needs_review или со сломанной ссылкой
+    attention: list[ResourceAdminRead] = Field(default_factory=list)
+    # Навыки без единого ресурса
+    skills_without_resources: list[GraphNodeRead] = Field(default_factory=list)
+    # Последние изменения в контенте профессии
+    recent: list[AdminEventRead] = Field(default_factory=list)
+
 

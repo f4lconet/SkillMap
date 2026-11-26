@@ -44,6 +44,10 @@ class Profession(Base, IdMixin, TimestampMixin):
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     content_version: Mapped[int] = mapped_column(Integer, default=1)
+    # Когда редактор последний раз сохранял черновик (обнуляется публикацией)
+    draft_saved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     skill_links: Mapped[list["ProfessionSkill"]] = relationship(  # noqa: F821
         "ProfessionSkill",

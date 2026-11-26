@@ -9,10 +9,10 @@ from urllib.parse import urlparse
 
 import httpx
 from fastapi import HTTPException, status
-from sqlalchemy import case, distinct, func, or_, select, update
+from sqlalchemy import and_, case, distinct, exists, func, not_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 
 from app.api.pagination import clamp_page
 from app.models import (
@@ -28,6 +28,9 @@ from app.models import (
 )
 from app.models.base import utcnow
 from app.schemas.admin import (
+    AdminEventRead,
+    AdminOverviewRead,
+    BrokenDependencyRead,
     DependencyCreate,
     DependencyRead,
     DependencyUpdate,
@@ -36,7 +39,10 @@ from app.schemas.admin import (
     GraphPositionUpdate,
     GraphSkillCreate,
     GraphStats,
+    OverviewChecklist,
+    OverviewStats,
     ProfessionAdminCreate,
+    ProfessionAdminRead,
     ProfessionAdminUpdate,
     ProfessionGraphRead,
     ProfessionSkillLinkIn,
@@ -48,7 +54,12 @@ from app.schemas.admin import (
     SkillAdminCreate,
     SkillAdminUpdate,
 )
-from app.services.graph import ensure_edge_is_safe, ensure_graph_has_no_cycles
+from app.services import admin_activity
+from app.services.graph import (
+    ensure_edge_is_safe,
+    ensure_graph_has_no_cycles,
+    find_graph_cycle,
+)
 
 NOT_FOUND_SKILL = "Навык не найден"
 NOT_FOUND_PROFESSION = "Профессия не найдена"
@@ -76,6 +87,15 @@ async def _commit(db: AsyncSession, on_conflict: str) -> None:
 
 def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+async def _flush(db: AsyncSession, on_conflict: str) -> None:
+    """Flush перед записью в журнал: переводим гонку по slug в 409, а не в 500."""
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise _conflict(on_conflict) from exc
 
 
 # --------------------------------------------------------------------------
@@ -114,6 +134,7 @@ async def list_professions(
     *,
     q: str | None,
     status_filter: str | None,
+    entry_level: str | None = None,
     limit: int,
     offset: int,
 ) -> tuple[list[Profession], int]:
@@ -128,6 +149,8 @@ async def list_professions(
         )
     if status_filter:
         stmt = stmt.where(Profession.status == status_filter)
+    if entry_level:
+        stmt = stmt.where(Profession.entry_level == entry_level)
     page = clamp_page(limit, offset)
     total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
     rows = await db.scalars(
@@ -139,19 +162,33 @@ async def list_professions(
 
 
 async def create_profession(
-    db: AsyncSession, data: ProfessionAdminCreate
+    db: AsyncSession, data: ProfessionAdminCreate, *, actor: User | None = None
 ) -> Profession:
     await _ensure_profession_slug_free(db, data.slug)
     await _ensure_direction_exists(db, data.direction_id)
     profession = Profession(**data.model_dump())
     db.add(profession)
+    await _flush(db, "Профессия с таким slug уже существует")
+    await admin_activity.record(
+        db,
+        actor=actor,
+        entity_type=admin_activity.ENTITY_PROFESSION,
+        action=admin_activity.ACTION_CREATED,
+        title=f"Создана профессия «{profession.title}»",
+        entity_id=profession.id,
+        profession_id=profession.id,
+    )
     await _commit(db, "Профессия с таким slug уже существует")
     await db.refresh(profession)
     return profession
 
 
 async def update_profession(
-    db: AsyncSession, profession_id: uuid.UUID, data: ProfessionAdminUpdate
+    db: AsyncSession,
+    profession_id: uuid.UUID,
+    data: ProfessionAdminUpdate,
+    *,
+    actor: User | None = None,
 ) -> Profession:
     profession = await get_profession(db, profession_id)
     changes = data.model_dump(exclude_unset=True, exclude_none=True)
@@ -161,14 +198,39 @@ async def update_profession(
         await _ensure_direction_exists(db, changes["direction_id"])
     for field, value in changes.items():
         setattr(profession, field, value)
+    if changes:
+        await admin_activity.record(
+            db,
+            actor=actor,
+            entity_type=admin_activity.ENTITY_PROFESSION,
+            action=admin_activity.ACTION_UPDATED,
+            title=f"Обновлена профессия «{profession.title}»",
+            detail=admin_activity.changed_labels(
+                changes, admin_activity.PROFESSION_FIELD_LABELS
+            ),
+            entity_id=profession.id,
+            profession_id=profession.id,
+        )
     await _commit(db, "Профессия с таким slug уже существует")
     await db.refresh(profession)
     return profession
 
 
-async def delete_profession(db: AsyncSession, profession_id: uuid.UUID) -> None:
+async def delete_profession(
+    db: AsyncSession, profession_id: uuid.UUID, *, actor: User | None = None
+) -> None:
     profession = await get_profession(db, profession_id)
+    title = profession.title
     await db.delete(profession)
+    # Событие без ссылки на удаляемую профессию: строка журнала должна выжить
+    await admin_activity.record(
+        db,
+        actor=actor,
+        entity_type=admin_activity.ENTITY_PROFESSION,
+        action=admin_activity.ACTION_DELETED,
+        title=f"Удалена профессия «{title}»",
+        entity_id=profession_id,
+    )
     await db.commit()
 
 
@@ -189,6 +251,8 @@ async def replace_profession_skills(
     db: AsyncSession,
     profession_id: uuid.UUID,
     links: Sequence[ProfessionSkillLinkIn],
+    *,
+    actor: User | None = None,
 ) -> list[ProfessionSkill]:
     """Полная замена состава профессии: порядок в списке = позиция на карте."""
     profession = await get_profession(db, profession_id)
@@ -231,6 +295,16 @@ async def replace_profession_skills(
         await db.delete(stale)
 
     profession.skills_count = len(links)
+    await admin_activity.record(
+        db,
+        actor=actor,
+        entity_type=admin_activity.ENTITY_PROFESSION,
+        action=admin_activity.ACTION_UPDATED,
+        title="Обновлён состав графа",
+        detail=f"{profession.title}: навыков — {len(links)}",
+        entity_id=profession.id,
+        profession_id=profession.id,
+    )
     await db.commit()
     return await list_profession_skills(db, profession_id)
 
@@ -299,17 +373,38 @@ async def list_skills(
     return list(rows), total or 0
 
 
-async def create_skill(db: AsyncSession, data: SkillAdminCreate) -> Skill:
+async def create_skill(
+    db: AsyncSession,
+    data: SkillAdminCreate,
+    *,
+    actor: User | None = None,
+    log: bool = True,
+) -> Skill:
     await _ensure_skill_slug_free(db, data.slug)
     skill = Skill(**data.model_dump())
     db.add(skill)
+    await _flush(db, "Навык с таким slug уже существует")
+    if log:
+        await admin_activity.record(
+            db,
+            actor=actor,
+            entity_type=admin_activity.ENTITY_SKILL,
+            action=admin_activity.ACTION_CREATED,
+            title=f"Создан навык «{skill.title}»",
+            entity_id=skill.id,
+            skill_id=skill.id,
+        )
     await _commit(db, "Навык с таким slug уже существует")
     await db.refresh(skill)
     return skill
 
 
 async def update_skill(
-    db: AsyncSession, skill_id: uuid.UUID, data: SkillAdminUpdate
+    db: AsyncSession,
+    skill_id: uuid.UUID,
+    data: SkillAdminUpdate,
+    *,
+    actor: User | None = None,
 ) -> Skill:
     skill = await get_skill(db, skill_id)
     changes = data.model_dump(exclude_unset=True, exclude_none=True)
@@ -319,16 +414,49 @@ async def update_skill(
             changes[field] = getattr(data, field)
     if "slug" in changes:
         await _ensure_skill_slug_free(db, changes["slug"], skill_id)
+    previous_hours = skill.estimated_hours
     for field, value in changes.items():
         setattr(skill, field, value)
+    if changes:
+        detail = admin_activity.changed_labels(
+            changes, admin_activity.SKILL_FIELD_LABELS
+        )
+        if "estimated_hours" in changes:
+            detail = (
+                f"время изучения {previous_hours or 0} → "
+                f"{skill.estimated_hours or 0} ч"
+            )
+        await admin_activity.record(
+            db,
+            actor=actor,
+            entity_type=admin_activity.ENTITY_SKILL,
+            action=admin_activity.ACTION_UPDATED,
+            title=f"Обновлён навык «{skill.title}»",
+            detail=detail,
+            entity_id=skill.id,
+            skill_id=skill.id,
+        )
     await _commit(db, "Навык с таким slug уже существует")
     await db.refresh(skill)
     return skill
 
 
-async def delete_skill(db: AsyncSession, skill_id: uuid.UUID) -> None:
+async def delete_skill(
+    db: AsyncSession, skill_id: uuid.UUID, *, actor: User | None = None
+) -> None:
     skill = await get_skill(db, skill_id)
+    title = skill.title
+    profession_ids = await admin_activity.professions_of_skill(db, skill_id)
     await db.delete(skill)
+    await admin_activity.record(
+        db,
+        actor=actor,
+        entity_type=admin_activity.ENTITY_SKILL,
+        action=admin_activity.ACTION_DELETED,
+        title=f"Удалён навык «{title}»",
+        entity_id=skill_id,
+        profession_id=profession_ids[0] if profession_ids else None,
+    )
     await db.commit()
 
 
@@ -424,8 +552,14 @@ async def _ensure_skills_exist(
             raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND_SKILL)
 
 
+def _dependency_detail(read: DependencyRead) -> str:
+    arrow = f"{read.prerequisite_title} → {read.skill_title}"
+    label = admin_activity.DEPENDENCY_TYPE_LABELS.get(str(read.dep_type), "")
+    return f"{arrow} · {label}" if label else arrow
+
+
 async def create_dependency(
-    db: AsyncSession, data: DependencyCreate
+    db: AsyncSession, data: DependencyCreate, *, actor: User | None = None
 ) -> DependencyRead:
     await _ensure_skills_exist(db, [data.skill_id, data.prerequisite_id])
     await ensure_edge_is_safe(db, data.skill_id, data.prerequisite_id)
@@ -438,6 +572,18 @@ async def create_dependency(
         dep_type=data.dep_type,
     )
     db.add(dep)
+    await _flush(db, "Такая связь уже есть")
+    read = (await to_dependency_read(db, [dep]))[0]
+    await admin_activity.record(
+        db,
+        actor=actor,
+        entity_type=admin_activity.ENTITY_DEPENDENCY,
+        action=admin_activity.ACTION_CREATED,
+        title="Добавлена связь в графе",
+        detail=_dependency_detail(read),
+        entity_id=dep.id,
+        skill_id=dep.skill_id,
+    )
     await _commit(db, "Такая связь уже есть")
     await db.refresh(dep)
     return (await to_dependency_read(db, [dep]))[0]
@@ -453,7 +599,11 @@ async def get_dependency(
 
 
 async def update_dependency(
-    db: AsyncSession, dependency_id: uuid.UUID, data: DependencyUpdate
+    db: AsyncSession,
+    dependency_id: uuid.UUID,
+    data: DependencyUpdate,
+    *,
+    actor: User | None = None,
 ) -> DependencyRead:
     dep = await get_dependency(db, dependency_id)
     changes = data.model_dump(exclude_unset=True, exclude_none=True)
@@ -473,16 +623,40 @@ async def update_dependency(
     dep.skill_id = skill_id
     dep.prerequisite_id = prerequisite_id
     dep.dep_type = dep_type
+    await _flush(db, "Такая связь уже есть")
+    read = (await to_dependency_read(db, [dep]))[0]
+    await admin_activity.record(
+        db,
+        actor=actor,
+        entity_type=admin_activity.ENTITY_DEPENDENCY,
+        action=admin_activity.ACTION_UPDATED,
+        title="Изменена связь в графе",
+        detail=_dependency_detail(read),
+        entity_id=dep.id,
+        skill_id=dep.skill_id,
+    )
     await _commit(db, "Такая связь уже есть")
     await db.refresh(dep)
     return (await to_dependency_read(db, [dep]))[0]
 
 
 async def delete_dependency(
-    db: AsyncSession, dependency_id: uuid.UUID
+    db: AsyncSession, dependency_id: uuid.UUID, *, actor: User | None = None
 ) -> None:
     dep = await get_dependency(db, dependency_id)
+    read = (await to_dependency_read(db, [dep]))[0]
+    skill_id = dep.skill_id
     await db.delete(dep)
+    await admin_activity.record(
+        db,
+        actor=actor,
+        entity_type=admin_activity.ENTITY_DEPENDENCY,
+        action=admin_activity.ACTION_DELETED,
+        title="Удалена связь в графе",
+        detail=_dependency_detail(read),
+        entity_id=dependency_id,
+        skill_id=skill_id,
+    )
     await db.commit()
 
 
@@ -575,6 +749,7 @@ def _resource_conditions(
     lang: str | None = None,
     is_free: bool | None = None,
     status_filter: str | None = None,
+    link_status: str | None = None,
 ) -> list:
     conditions = []
     if q and q.strip():
@@ -603,6 +778,8 @@ def _resource_conditions(
         conditions.append(Resource.is_free == is_free)
     if status_filter:
         conditions.append(Resource.status == status_filter)
+    if link_status:
+        conditions.append(Resource.link_status == link_status)
     return conditions
 
 
@@ -616,6 +793,7 @@ async def list_resources(
     lang: str | None = None,
     is_free: bool | None = None,
     status_filter: str | None = None,
+    link_status: str | None = None,
     sort_by: str = "skill",
     sort_dir: str = "asc",
     limit: int = 200,
@@ -631,6 +809,7 @@ async def list_resources(
         lang=lang,
         is_free=is_free,
         status_filter=status_filter,
+        link_status=link_status,
     )
     total = await db.scalar(select(func.count(Resource.id)).where(*conditions))
     column = RESOURCE_SORT_COLUMNS.get(sort_by, Skill.title)
@@ -708,8 +887,21 @@ async def _touch_skill(db: AsyncSession, skill_id: uuid.UUID) -> None:
     skill.updated_at = utcnow()
 
 
+async def _skill_title(db: AsyncSession, skill_id: uuid.UUID) -> str:
+    return await db.scalar(select(Skill.title).where(Skill.id == skill_id)) or ""
+
+
+def _resource_detail(resource: Resource, skill_title: str) -> str:
+    """Короткое описание ресурса для ленты изменений."""
+    type_label = admin_activity.RESOURCE_TYPE_LABELS.get(
+        str(resource.resource_type or ""), str(resource.resource_type or "")
+    )
+    parts = [part for part in (skill_title, type_label, resource.provider) if part]
+    return " · ".join(parts)
+
+
 async def create_resource(
-    db: AsyncSession, data: ResourceAdminCreate
+    db: AsyncSession, data: ResourceAdminCreate, *, actor: User | None = None
 ) -> Resource:
     await _touch_skill(db, data.skill_id)
     payload = data.model_dump()
@@ -717,13 +909,28 @@ async def create_resource(
         payload["published_at"] = utcnow()
     resource = Resource(**payload)
     db.add(resource)
+    await db.flush()
+    await admin_activity.record(
+        db,
+        actor=actor,
+        entity_type=admin_activity.ENTITY_RESOURCE,
+        action=admin_activity.ACTION_CREATED,
+        title=f"Добавлен ресурс «{resource.title}»",
+        detail=_resource_detail(resource, await _skill_title(db, resource.skill_id)),
+        entity_id=resource.id,
+        skill_id=resource.skill_id,
+    )
     await db.commit()
     await db.refresh(resource)
     return resource
 
 
 async def update_resource(
-    db: AsyncSession, resource_id: uuid.UUID, data: ResourceAdminUpdate
+    db: AsyncSession,
+    resource_id: uuid.UUID,
+    data: ResourceAdminUpdate,
+    *,
+    actor: User | None = None,
 ) -> Resource:
     resource = await get_resource(db, resource_id)
     changes = data.model_dump(exclude_unset=True, exclude_none=True)
@@ -742,26 +949,62 @@ async def update_resource(
         setattr(resource, field, value)
     await _touch_skill(db, previous_skill_id)
     await _touch_skill(db, resource.skill_id)
+    if changes:
+        await admin_activity.record(
+            db,
+            actor=actor,
+            entity_type=admin_activity.ENTITY_RESOURCE,
+            action=admin_activity.ACTION_UPDATED,
+            title=f"Обновлён ресурс «{resource.title}»",
+            detail=admin_activity.changed_labels(
+                changes, admin_activity.RESOURCE_FIELD_LABELS
+            ),
+            entity_id=resource.id,
+            skill_id=resource.skill_id,
+        )
     await db.commit()
     await db.refresh(resource)
     return resource
 
 
-async def publish_resource(db: AsyncSession, resource_id: uuid.UUID) -> Resource:
+async def publish_resource(
+    db: AsyncSession, resource_id: uuid.UUID, *, actor: User | None = None
+) -> Resource:
     resource = await get_resource(db, resource_id)
     resource.status = "published"
     resource.published_at = utcnow()
     await _touch_skill(db, resource.skill_id)
+    await admin_activity.record(
+        db,
+        actor=actor,
+        entity_type=admin_activity.ENTITY_RESOURCE,
+        action=admin_activity.ACTION_PUBLISHED,
+        title="Ресурс опубликован",
+        detail=_resource_detail(resource, await _skill_title(db, resource.skill_id)),
+        entity_id=resource.id,
+        skill_id=resource.skill_id,
+    )
     await db.commit()
     await db.refresh(resource)
     return resource
 
 
-async def delete_resource(db: AsyncSession, resource_id: uuid.UUID) -> None:
+async def delete_resource(
+    db: AsyncSession, resource_id: uuid.UUID, *, actor: User | None = None
+) -> None:
     resource = await get_resource(db, resource_id)
     skill_id = resource.skill_id
+    title = resource.title
     await db.delete(resource)
     await _touch_skill(db, skill_id)
+    await admin_activity.record(
+        db,
+        actor=actor,
+        entity_type=admin_activity.ENTITY_RESOURCE,
+        action=admin_activity.ACTION_DELETED,
+        title=f"Удалён ресурс «{title}»",
+        skill_id=skill_id,
+    )
     await db.commit()
 
 
@@ -797,12 +1040,23 @@ def _apply_link_result(resource: Resource, ok: bool, checked_at: datetime) -> No
 
 
 async def check_resource_link(
-    db: AsyncSession, resource_id: uuid.UUID
+    db: AsyncSession, resource_id: uuid.UUID, *, actor: User | None = None
 ) -> tuple[Resource, bool]:
     resource = await get_resource(db, resource_id)
     ok = await _probe_url(resource.url or "")
     _apply_link_result(resource, ok, utcnow())
     await _touch_skill(db, resource.skill_id)
+    if not ok:
+        await admin_activity.record(
+            db,
+            actor=actor,
+            entity_type=admin_activity.ENTITY_RESOURCE,
+            action=admin_activity.ACTION_CHECKED,
+            title="Ссылка ресурса недоступна",
+            detail=f"«{resource.title}» · {resource.url or 'без ссылки'}",
+            entity_id=resource.id,
+            skill_id=resource.skill_id,
+        )
     await db.commit()
     await db.refresh(resource)
     return resource, ok
@@ -815,6 +1069,7 @@ async def check_resource_links(
     skill_id: uuid.UUID | None = None,
     only_unchecked: bool = False,
     limit: int = 50,
+    actor: User | None = None,
 ) -> tuple[list[Resource], int]:
     """Пакетная проверка ссылок. Возвращает ресурсы и число доступных."""
     if profession_id:
@@ -844,6 +1099,16 @@ async def check_resource_links(
         ok_count += int(ok)
     for skill in {r.skill_id for r in rows}:
         await _touch_skill(db, skill)
+    await admin_activity.record(
+        db,
+        actor=actor,
+        entity_type=admin_activity.ENTITY_RESOURCE,
+        action=admin_activity.ACTION_CHECKED,
+        title="Проверены ссылки ресурсов",
+        detail=f"Проверено {len(rows)}, недоступно {len(rows) - ok_count}",
+        profession_id=profession_id,
+        skill_id=skill_id if profession_id is None else None,
+    )
     await db.commit()
     for resource in rows:
         await db.refresh(resource)
@@ -1022,6 +1287,19 @@ async def publish_profession(
     profession.published_at = utcnow()
     profession.published_by_id = user.id
     profession.content_version = (profession.content_version or 0) + 1
+    # Публикация закрывает черновик: «сохранён в …» больше не актуален
+    profession.draft_saved_at = None
+    await admin_activity.record(
+        db,
+        actor=user,
+        entity_type=admin_activity.ENTITY_PROFESSION,
+        action=admin_activity.ACTION_PUBLISHED,
+        title="Профессия опубликована",
+        detail=f"«{profession.title}» · версия {profession.content_version}",
+        entity_id=profession.id,
+        profession_id=profession.id,
+        touch_draft=False,
+    )
     await db.commit()
     await db.refresh(profession)
     return PublishRead(
@@ -1034,7 +1312,11 @@ async def publish_profession(
 
 
 async def upsert_graph_skill(
-    db: AsyncSession, profession_id: uuid.UUID, data: GraphSkillCreate
+    db: AsyncSession,
+    profession_id: uuid.UUID,
+    data: GraphSkillCreate,
+    *,
+    actor: User | None = None,
 ) -> Skill:
     """Создаёт навык и сразу ставит его в конец списка навыков профессии."""
     profession = await get_profession(db, profession_id)
@@ -1045,7 +1327,9 @@ async def upsert_graph_skill(
             )
         )
     )
-    skill = await create_skill(db, SkillAdminCreate(**data.model_dump(exclude={"is_core"})))
+    skill = await create_skill(
+        db, SkillAdminCreate(**data.model_dump(exclude={"is_core"})), log=False
+    )
     db.add(
         ProfessionSkill(
             profession_id=profession_id,
@@ -1055,6 +1339,16 @@ async def upsert_graph_skill(
         )
     )
     profession.skills_count = len(positions) + 1
+    await admin_activity.record(
+        db,
+        actor=actor,
+        entity_type=admin_activity.ENTITY_SKILL,
+        action=admin_activity.ACTION_CREATED,
+        title=f"Добавлен навык «{skill.title}»",
+        detail=profession.title,
+        entity_id=skill.id,
+        profession_id=profession_id,
+    )
     await db.commit()
     await db.refresh(skill)
     return skill
@@ -1072,7 +1366,7 @@ async def update_skill_position(
 
 
 async def reset_profession_layout(
-    db: AsyncSession, profession_id: uuid.UUID
+    db: AsyncSession, profession_id: uuid.UUID, *, actor: User | None = None
 ) -> int:
     """Сбрасывает координаты всех узлов профессии — карта снова авто-раскладка."""
     skill_ids = await _profession_skill_ids(db, profession_id)
@@ -1082,5 +1376,210 @@ async def reset_profession_layout(
     for skill in skills:
         skill.pos_x = None
         skill.pos_y = None
+    await admin_activity.record(
+        db,
+        actor=actor,
+        entity_type=admin_activity.ENTITY_PROFESSION,
+        action=admin_activity.ACTION_UPDATED,
+        title="Сброшена раскладка карты",
+        detail=f"Узлов затронуто: {len(skills)}",
+        profession_id=profession_id,
+    )
     await db.commit()
     return len(skills)
+
+
+# --------------------------------------------------------------------------
+# Обзор админки: журнал, диагностика связей, сводка (неделя 6)
+# --------------------------------------------------------------------------
+
+
+async def list_history(
+    db: AsyncSession,
+    *,
+    profession_id: uuid.UUID | None = None,
+    skill_id: uuid.UUID | None = None,
+    entity_type: str | None = None,
+    action: str | None = None,
+    limit: int,
+    offset: int,
+) -> tuple[list[AdminEventRead], int]:
+    page = clamp_page(limit, offset)
+    events, total = await admin_activity.list_events(
+        db,
+        profession_id=profession_id,
+        skill_id=skill_id,
+        entity_type=entity_type,
+        action=action,
+        limit=page.limit,
+        offset=page.offset,
+    )
+    return [AdminEventRead.model_validate(event) for event in events], total
+
+
+async def list_broken_dependencies(
+    db: AsyncSession,
+    *,
+    profession_id: uuid.UUID | None = None,
+    limit: int = 200,
+    offset: int = 0,
+) -> tuple[list[BrokenDependencyRead], int]:
+    """Связи, которых не видно на карте.
+
+    Редактор графа строит рёбра только между навыками профессии, поэтому
+    связь «навык из профессии → навык вне её» молча теряется. Здесь такие
+    рёбра перечислены явно: без профессии — рёбра, не видимые нигде.
+    """
+    skill_a = aliased(Skill, name="dep_skill")
+    skill_b = aliased(Skill, name="dep_prerequisite")
+    base = (
+        select(
+            SkillDependency.id,
+            SkillDependency.skill_id,
+            SkillDependency.prerequisite_id,
+            skill_a.title,
+            skill_b.title,
+        )
+        .join(skill_a, skill_a.id == SkillDependency.skill_id)
+        .join(skill_b, skill_b.id == SkillDependency.prerequisite_id)
+    )
+
+    if profession_id is not None:
+        await get_profession(db, profession_id)
+        members = select(ProfessionSkill.skill_id).where(
+            ProfessionSkill.profession_id == profession_id
+        )
+        inside = and_(
+            SkillDependency.skill_id.in_(members),
+            SkillDependency.prerequisite_id.in_(members),
+        )
+        stmt = base.where(
+            or_(
+                SkillDependency.skill_id.in_(members),
+                SkillDependency.prerequisite_id.in_(members),
+            ),
+            not_(inside),
+        )
+        reason = "outside_profession"
+        reason_text = "Второй навык связи не входит в профессию"
+    else:
+        member_a = aliased(ProfessionSkill, name="member_a")
+        member_b = aliased(ProfessionSkill, name="member_b")
+        visible = exists(
+            select(1)
+            .select_from(member_a)
+            .join(member_b, member_b.profession_id == member_a.profession_id)
+            .where(
+                member_a.skill_id == SkillDependency.skill_id,
+                member_b.skill_id == SkillDependency.prerequisite_id,
+            )
+        )
+        stmt = base.where(not_(visible))
+        reason = "orphan"
+        reason_text = "Связь не отображается ни в одной профессии"
+
+    page = clamp_page(limit, offset)
+    total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
+    rows = await db.execute(
+        stmt.order_by(skill_a.title).limit(page.limit).offset(page.offset)
+    )
+    items = [
+        BrokenDependencyRead(
+            id=dep_id,
+            skill_id=skill_id,
+            skill_title=skill_title or "",
+            prerequisite_id=prerequisite_id,
+            prerequisite_title=prerequisite_title or "",
+            reason=reason,
+            reason_text=reason_text,
+        )
+        for dep_id, skill_id, prerequisite_id, skill_title, prerequisite_title in rows
+    ]
+    return items, total or 0
+
+
+async def get_admin_overview(
+    db: AsyncSession,
+    *,
+    profession_id: uuid.UUID | None = None,
+    recent_limit: int = 5,
+    attention_limit: int = 5,
+) -> AdminOverviewRead:
+    """Одна ручка на всю стартовую страницу админки.
+
+    Без `profession_id` берём профессию по умолчанию (приоритетные выше),
+    чтобы страница открывалась сразу после логина.
+    """
+    if profession_id is None:
+        profession_id = await db.scalar(
+            select(Profession.id)
+            .order_by(Profession.is_priority.desc(), Profession.title)
+            .limit(1)
+        )
+    if profession_id is None:
+        return AdminOverviewRead()
+
+    profession = await get_profession(db, profession_id)
+    graph = await get_profession_graph(db, profession_id)
+    resource_stats = await get_resource_stats(db, profession_id=profession_id)
+    _, broken_total = await list_broken_dependencies(
+        db, profession_id=profession_id, limit=1
+    )
+    cycle = await find_graph_cycle(db)
+
+    without_resources = [node for node in graph.nodes if node.resources_count == 0]
+    conditions = _resource_conditions(profession_id=profession_id)
+    attention_rows = await db.execute(
+        select(Resource, Skill.slug, Skill.title)
+        .join(Skill, Skill.id == Resource.skill_id)
+        .where(
+            *conditions,
+            or_(Resource.status == "needs_review", Resource.link_status == "broken"),
+        )
+        .order_by(Resource.updated_at.desc())
+        .limit(max(1, attention_limit))
+    )
+    attention = [
+        to_resource_read(resource, slug, title)
+        for resource, slug, title in attention_rows
+    ]
+
+    recent, _ = await list_history(
+        db, profession_id=profession_id, limit=recent_limit, offset=0
+    )
+
+    action_needed = len(without_resources) + broken_total + resource_stats.needs_review
+    profession_read = ProfessionAdminRead.model_validate(profession)
+    profession_read.published_by_name = await _user_name(
+        db, profession.published_by_id
+    )
+    return AdminOverviewRead(
+        profession=profession_read,
+        has_unpublished_changes=graph.has_unpublished_changes,
+        stats=OverviewStats(
+            skills=graph.stats.skills,
+            dependencies=graph.stats.required + graph.stats.recommended,
+            resources=resource_stats.total,
+            attention=action_needed,
+            required=graph.stats.required,
+            recommended=graph.stats.recommended,
+            layers=graph.stats.layers,
+            published_resources=resource_stats.published,
+            draft_resources=resource_stats.draft,
+            needs_review_resources=resource_stats.needs_review,
+            broken_links=resource_stats.broken_links,
+        ),
+        checklist=OverviewChecklist(
+            graph_ready=bool(graph.nodes) and not cycle and broken_total == 0,
+            resources_ready=not without_resources,
+            links_ready=resource_stats.broken_links == 0,
+            skills_without_resources=len(without_resources),
+            broken_dependencies=broken_total,
+            unchecked_links=resource_stats.unchecked_links,
+            cycle=[str(skill_id) for skill_id in (cycle or [])],
+        ),
+        attention=attention,
+        skills_without_resources=without_resources[:attention_limit],
+        recent=recent,
+    )
+

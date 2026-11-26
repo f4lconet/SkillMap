@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -231,7 +231,7 @@ export function useAdminResources(): AdminResourcesState {
     }
     try {
       const [professionList, skillList] = await Promise.all([
-        adminGraphApi.listProfessions(200),
+        adminGraphApi.listProfessions({ limit: 200 }),
         adminGraphApi.listSkills({ limit: 200 }),
       ]);
       setProfessions(professionList.items);

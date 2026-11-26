@@ -1,3 +1,4 @@
+from app.models.activity import AdminEvent
 from app.models.base import Base
 from app.models.direction import Direction
 from app.models.enums import (
@@ -15,6 +16,7 @@ from app.models.user import User
 from app.models.resource import Plan, PlanItem, Resource
 
 __all__ = [
+    "AdminEvent",
     "Base",
     "DependencyType",
     "Direction",

@@ -164,7 +164,7 @@
 
 | Method | Path | Описание |
 |--------|------|----------|
-| GET | `/admin/professions` | `q`, `status` (alias для `status_filter`), `limit` (1..200, по умолчанию 50), `offset` |
+| GET | `/admin/professions` | `q`, `status` (alias для `status_filter`), `entry_level` (`beginner`/`intermediate`/`advanced`), `limit` (1..200, по умолчанию 50), `offset` |
 | POST | `/admin/professions` | создать; `slug` уникален (409 при дубликате) |
 | GET | `/admin/professions/{profession_id}` | детали + `skills_count` |
 | PATCH | `/admin/professions/{profession_id}` | частичное обновление |
@@ -207,7 +207,7 @@
 
 | Method | Path | Описание |
 |--------|------|----------|
-| GET | `/admin/resources` | `skill_id`, `limit` (1..200, по умолчанию 50), `offset` |
+| GET | `/admin/resources` | `skill_id`, `link_status` (`unknown`/`ok`/`broken`), `limit` (1..200, по умолчанию 50), `offset` |
 | POST | `/admin/resources/check-links` | пакетная проверка доступности ссылок (`limit` из той же шкалы) |
 | POST | `/admin/resources` | создать ресурс для навыка |
 | PATCH | `/admin/resources/{resource_id}` | частичное обновление |
@@ -219,6 +219,51 @@
 **Валидация URL.** `url` ресурса проверяется на схему `http`/`https` (тип
 `ResourceUrl` в `app/schemas/admin.py`). Значения вида `javascript:…` или пустая
 строка отклоняются с `422`, а не роняют редактор в `500`.
+
+### Обзор редакторской и журнал (неделя 6)
+
+Страница «Обзор» (`/admin`) собирает счётчики, чек-лист и последние изменения
+одним запросом — без «водопада» запросов при открытии.
+
+| Method | Path | Описание |
+|--------|------|----------|
+| GET | `/admin/overview` | сводка по профессии: `profession_id` (без него — приоритетная профессия), `recent_limit` (0..50, по умолчанию 5) |
+| GET | `/admin/history` | журнал изменений: `profession_id`, `skill_id`, `entity_type`, `action`, `limit`, `offset` |
+| GET | `/admin/dependencies/broken` | связи, невидимые на карте: `profession_id` (без него — невидимые нигде), `limit`, `offset` |
+
+**`GET /admin/overview`** вернёт:
+
+- `profession` — карточка профессии (`content_version`, `published_at`,
+  `published_by_name`, `draft_saved_at`); `null`, если профессий ещё нет;
+- `has_unpublished_changes` — есть ли черновик относительно последней публикации;
+- `stats` — плитки KPI: `skills`, `dependencies`, `resources`, `attention`,
+  `required`, `recommended`, `layers`, `published_resources`, `draft_resources`,
+  `needs_review_resources`, `broken_links`;
+- `checklist` — чек-лист перед публикацией: `graph_ready`, `resources_ready`,
+  `links_ready`, `skills_without_resources`, `broken_dependencies`,
+  `unchecked_links`, `cycle` (навыки, образующие цикл);
+- `attention` — ресурсы, требующие проверки (`ResourceAdminRead[]`);
+- `skills_without_resources` — навыки без единого материала (`GraphNodeRead[]`);
+- `recent` — последние записи журнала по этой профессии (`AdminEventRead[]`).
+
+**`GET /admin/history`** — записи вида `{id, created_at, actor_id, actor_name,
+entity_type, entity_id, profession_id, skill_id, action, title, detail}` с
+разбивкой `{items, total, limit, offset}`. `entity_type` — `profession` | `skill` |
+`dependency` | `resource`, `action` — `created` | `updated` | `deleted` |
+`published` | `checked`. Фильтр `profession_id` включает и события навыков этой
+профессии.
+
+**`GET /admin/dependencies/broken`** — `{id, skill_id, skill_title,
+prerequisite_id, prerequisite_title, reason, reason_text}`, где `reason` —
+`outside_profession` (второй конец связи вне профессии) или `orphan` (ребро не
+видно ни на одной карте). Редактор графа рисует ребро только когда оба конца
+входят в профессию — такие связи иначе терялись бы молча.
+
+**Журнал.** Каждая мутация в админке пишет запись в `admin_events` в той же
+транзакции (модель `app/models/activity.py`, логика —
+`app/services/admin_activity.py`). `entity_id` без внешнего ключа: запись должна
+переживать удаление сущности. Запись также обновляет `professions.draft_saved_at`
+(«черновик сохранён» в шапке редактора).
 
 ## Что сознательно не реализовано
 

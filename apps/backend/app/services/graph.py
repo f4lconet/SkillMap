@@ -118,9 +118,14 @@ async def ensure_edge_is_safe(
         )
 
 
+async def find_graph_cycle(db: AsyncSession) -> list[uuid.UUID] | None:
+    """Цикл во всём графе навыков или None — диагностика для админки."""
+    return find_cycle(await _all_edges(db))
+
+
 async def ensure_graph_has_no_cycles(db: AsyncSession) -> None:
     """Проверка всего графа — для публикации контента и диагностики."""
-    cycle = find_cycle(await _all_edges(db))
+    cycle = await find_graph_cycle(db)
     if cycle is not None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,

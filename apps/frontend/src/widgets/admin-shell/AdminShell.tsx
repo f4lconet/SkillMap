@@ -37,7 +37,7 @@ const NAV: NavItem[] = [
   { href: '/admin', label: 'Обзор', icon: '▦' },
   { href: '/admin/graph', label: 'Граф', icon: '⬡' },
   { href: '/admin/resources', label: 'Ресурсы', icon: '▤' },
-  { href: '/admin/history', label: 'История изменений', icon: '↺', disabled: true },
+  { href: '/admin/history', label: 'История изменений', icon: '↺' },
 ];
 
 function initials(name: string): string {

@@ -25,6 +25,8 @@ export type AdminProfession = {
   publishedAt: string | null;
   contentVersion: number;
   publishedByName: string;
+  /** Когда редактор последний раз менял контент профессии (для «черновик сохранён»). */
+  draftSavedAt: string | null;
 };
 
 export type AdminProfessionList = {
@@ -32,6 +34,15 @@ export type AdminProfessionList = {
   total: number;
   limit: number;
   offset: number;
+};
+
+/** GET /admin/professions — фильтры списка. */
+export type AdminProfessionListParams = {
+  q?: string;
+  status?: ProfessionStatus;
+  entryLevel?: ProfessionLevel;
+  limit?: number;
+  offset?: number;
 };
 
 /** Узел графа: навык + позиция в профессии + состояние публикации. */
@@ -155,6 +166,34 @@ export type AdminDependencyList = {
   total: number;
   limit: number;
   offset: number;
+};
+
+/**
+ * GET /admin/dependencies/broken — связь, которую не видно на карте:
+ * второй конец вне профессии (`outside_profession`) или связь не попадает
+ * ни в одну карту (`orphan`).
+ */
+export type BrokenDependency = {
+  id: string;
+  skillId: string;
+  skillTitle: string;
+  prerequisiteId: string;
+  prerequisiteTitle: string;
+  reason: 'outside_profession' | 'orphan';
+  reasonText: string;
+};
+
+export type BrokenDependencyList = {
+  items: BrokenDependency[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type BrokenDependencyListParams = {
+  professionId?: string;
+  limit?: number;
+  offset?: number;
 };
 
 export type AdminPublishResult = {

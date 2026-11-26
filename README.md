@@ -16,8 +16,8 @@ apps/
 # Frontend
 npm install && npm run dev
 
-# Backend
-cd apps/backend && poetry install && uvicorn app.main:app --reload
+# Backend (миграции обязательны перед запуском)
+cd apps/backend && poetry install && alembic upgrade head && uvicorn app.main:app --reload
 ```
 
 ## UI-kit

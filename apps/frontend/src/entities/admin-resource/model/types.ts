@@ -73,6 +73,7 @@ export type AdminResourceListParams = {
   lang?: string;
   isFree?: boolean;
   status?: ResourceStatus;
+  linkStatus?: ResourceLinkStatus;
   sortBy?: ResourceSortField;
   sortDir?: SortDirection;
   limit?: number;
