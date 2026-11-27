@@ -12,6 +12,8 @@ export {
 export type { EventTone } from './model/labels';
 export type {
   AdminAction,
+  AdminEditor,
+  AdminEditorList,
   AdminEntityType,
   AdminEvent,
   AdminEventList,

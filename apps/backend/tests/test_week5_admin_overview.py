@@ -1,4 +1,4 @@
-"""Тесты недели 6: страница «Обзор» админки.
+"""Тесты недели 5: страница «Обзор» админки.
 
 Проверяем то, ради чего страница существует: журнал изменений (кто и когда
 правил контент), диагностику невидимых связей и одну сводную ручку вместо
@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -120,6 +121,95 @@ async def test_history_of_skill_is_visible_for_profession(client, editor_headers
 @pytest.mark.asyncio
 async def test_history_requires_editor(client, auth_client):
     r = await auth_client.get(f"{API}/history")
+    assert r.status_code == 403
+
+
+@pytest_asyncio.fixture
+async def second_editor_headers(client: AsyncClient, session_factory):
+    await create_user(session_factory, "editor2@example.ru", role=UserRole.EDITOR)
+    r = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "editor2@example.ru", "password": PASSWORD},
+    )
+    assert r.status_code == 200, r.text
+    return bearer(r)
+
+
+async def _events(client: AsyncClient, headers: dict, **params) -> dict:
+    r = await client.get(f"{API}/history", params=params, headers=headers)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+@pytest.mark.asyncio
+async def test_history_filters_by_search_and_author(
+    client, editor_headers, second_editor_headers
+):
+    first = await _profession(client, editor_headers, "filter-first")
+    second = await _profession(client, second_editor_headers, "filter-second")
+
+    # Поиск выполняется на сервере: в заголовке записи есть название профессии
+    data = await _events(client, editor_headers, q="filter-first")
+    assert data["total"] >= 1
+    assert {item["profession_id"] for item in data["items"]} == {first["id"]}
+
+    data = await _events(client, editor_headers, q="filter-second")
+    assert {item["profession_id"] for item in data["items"]} == {second["id"]}
+
+    everyone = await _events(client, editor_headers)
+    my_actor_id = next(
+        item["actor_id"]
+        for item in everyone["items"]
+        if item["profession_id"] == first["id"]
+    )
+
+    data = await _events(client, editor_headers, actor_id=my_actor_id)
+    assert data["total"] >= 1
+    assert {item["actor_id"] for item in data["items"]} == {my_actor_id}
+    assert second["id"] not in {item["profession_id"] for item in data["items"]}
+
+    # Авторы для фильтра «Автор» берутся из самих записей журнала
+    r = await client.get(f"{API}/editors", headers=editor_headers)
+    assert r.status_code == 200, r.text
+    editors = r.json()["items"]
+    assert len(editors) == 2
+    assert my_actor_id in {item["actor_id"] for item in editors}
+    assert all(item["events_count"] >= 1 for item in editors)
+
+
+@pytest.mark.asyncio
+async def test_history_filters_by_period(client, editor_headers):
+    await _profession(client, editor_headers, "period-prof")
+    yesterday = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+    tomorrow = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+
+    assert (await _events(client, editor_headers, created_from=yesterday))["total"] >= 1
+    assert (await _events(client, editor_headers, created_from=tomorrow))["total"] == 0
+    assert (await _events(client, editor_headers, created_to=yesterday))["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_history_export_csv(client, editor_headers, auth_client):
+    await _profession(client, editor_headers, "export-prof")
+
+    r = await client.get(
+        f"{API}/history/export",
+        params={"q": "export-prof"},
+        headers=editor_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("text/csv")
+    assert "skillmap-history-" in r.headers["content-disposition"]
+    # BOM — иначе Excel открывает русский текст кракозябрами
+    assert r.content.startswith(b"\xef\xbb\xbf")
+
+    lines = r.content.decode("utf-8-sig").strip().splitlines()
+    assert lines[0].split(";")[:4] == ["Дата", "Редактор", "Тип", "Действие"]
+    assert len(lines) == 2  # шапка + единственная запись о создании профессии
+    assert lines[1].split(";")[2] == "профессия"
+    assert "export-prof" in lines[1]
+
+    r = await auth_client.get(f"{API}/history/export")
     assert r.status_code == 403
 
 

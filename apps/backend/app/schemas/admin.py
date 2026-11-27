@@ -425,6 +425,20 @@ class AdminEventList(BaseModel):
     offset: int
 
 
+class AdminEditorRead(BaseModel):
+    """Автор записей журнала — вариант фильтра «Автор»."""
+
+    actor_id: uuid.UUID | None = None
+    actor_name: str = ""
+    events_count: int = 0
+    last_event_at: datetime | None = None
+
+
+class AdminEditorList(BaseModel):
+    items: list[AdminEditorRead]
+    total: int
+
+
 class BrokenDependencyRead(BaseModel):
     """Связь, которую редактор не увидит на карте профессии."""
 

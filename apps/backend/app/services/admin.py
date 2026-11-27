@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -28,6 +30,7 @@ from app.models import (
 )
 from app.models.base import utcnow
 from app.schemas.admin import (
+    AdminEditorRead,
     AdminEventRead,
     AdminOverviewRead,
     BrokenDependencyRead,
@@ -1393,6 +1396,22 @@ async def reset_profession_layout(
 # Обзор админки: журнал, диагностика связей, сводка (неделя 6)
 # --------------------------------------------------------------------------
 
+HISTORY_CSV_HEADER = [
+    "Дата",
+    "Редактор",
+    "Тип",
+    "Действие",
+    "Заголовок",
+    "Подробности",
+    "Профессия",
+    "Навык",
+    "ID объекта",
+]
+
+
+def _csv_id(value: uuid.UUID | None) -> str:
+    return str(value) if value is not None else ""
+
 
 async def list_history(
     db: AsyncSession,
@@ -1401,6 +1420,10 @@ async def list_history(
     skill_id: uuid.UUID | None = None,
     entity_type: str | None = None,
     action: str | None = None,
+    actor_id: uuid.UUID | None = None,
+    q: str | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
     limit: int,
     offset: int,
 ) -> tuple[list[AdminEventRead], int]:
@@ -1411,10 +1434,74 @@ async def list_history(
         skill_id=skill_id,
         entity_type=entity_type,
         action=action,
+        actor_id=actor_id,
+        q=q,
+        created_from=created_from,
+        created_to=created_to,
         limit=page.limit,
         offset=page.offset,
     )
     return [AdminEventRead.model_validate(event) for event in events], total
+
+
+async def list_editors(db: AsyncSession) -> list[AdminEditorRead]:
+    """Авторы журнала: заполняет фильтр «Автор» на странице истории."""
+    stats = await admin_activity.list_editor_stats(db)
+    return [
+        AdminEditorRead(
+            actor_id=stat.actor_id,
+            actor_name=stat.actor_name,
+            events_count=stat.events_count,
+            last_event_at=stat.last_event_at,
+        )
+        for stat in stats
+    ]
+
+
+async def export_history_csv(
+    db: AsyncSession,
+    *,
+    profession_id: uuid.UUID | None = None,
+    skill_id: uuid.UUID | None = None,
+    entity_type: str | None = None,
+    action: str | None = None,
+    actor_id: uuid.UUID | None = None,
+    q: str | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+) -> str:
+    """Журнал в CSV для Excel: `;` как разделитель, не больше строки-лимита."""
+    events = await admin_activity.export_events(
+        db,
+        profession_id=profession_id,
+        skill_id=skill_id,
+        entity_type=entity_type,
+        action=action,
+        actor_id=actor_id,
+        q=q,
+        created_from=created_from,
+        created_to=created_to,
+    )
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, delimiter=";", lineterminator="\r\n")
+    writer.writerow(HISTORY_CSV_HEADER)
+    for event in events:
+        writer.writerow(
+            [
+                event.created_at.strftime("%d.%m.%Y %H:%M"),
+                event.actor_name or "Система",
+                admin_activity.ENTITY_TYPE_LABELS.get(
+                    event.entity_type, event.entity_type
+                ),
+                admin_activity.ACTION_LABELS.get(event.action, event.action),
+                event.title,
+                event.detail or "",
+                _csv_id(event.profession_id),
+                _csv_id(event.skill_id),
+                _csv_id(event.entity_id),
+            ]
+        )
+    return buffer.getvalue()
 
 
 async def list_broken_dependencies(

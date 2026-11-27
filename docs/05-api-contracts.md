@@ -228,7 +228,9 @@
 | Method | Path | Описание |
 |--------|------|----------|
 | GET | `/admin/overview` | сводка по профессии: `profession_id` (без него — приоритетная профессия), `recent_limit` (0..50, по умолчанию 5) |
-| GET | `/admin/history` | журнал изменений: `profession_id`, `skill_id`, `entity_type`, `action`, `limit`, `offset` |
+| GET | `/admin/history` | журнал изменений: `profession_id`, `skill_id`, `entity_type`, `action`, `actor_id`, `q`, `created_from`, `created_to`, `limit`, `offset` |
+| GET | `/admin/history/export` | CSV-выгрузка журнала с теми же фильтрами (кроме `limit`/`offset`) |
+| GET | `/admin/editors` | список авторов журнала для фильтра «Автор»: `{items, total}` |
 | GET | `/admin/dependencies/broken` | связи, невидимые на карте: `profession_id` (без него — невидимые нигде), `limit`, `offset` |
 
 **`GET /admin/overview`** вернёт:
@@ -252,6 +254,27 @@ entity_type, entity_id, profession_id, skill_id, action, title, detail}` с
 `dependency` | `resource`, `action` — `created` | `updated` | `deleted` |
 `published` | `checked`. Фильтр `profession_id` включает и события навыков этой
 профессии.
+
+Фильтры журнала (все необязательные, комбинируются по «И»):
+
+- `actor_id` — только события выбранного редактора;
+- `q` (до 100 символов) — поиск по `title`, `detail` и `actor_name` без учёта
+  регистра; `%` и `_` трактуются буквально;
+- `created_from` / `created_to` — границы периода по `created_at` (включительно).
+  Страница «История изменений» превращает селект «7 дней / 30 дней / всё время»
+  в `created_from`.
+
+**`GET /admin/editors`** — `{items: [{actor_id, actor_name, events_count,
+last_event_at}], total}`, отсортировано по последней активности. Источник —
+различные авторы в `admin_events` (аккаунты, которые ничего не меняли, в списке
+не появляются). Записи без автора (`actor_id: null`) в фильтр не попадают.
+
+**`GET /admin/history/export`** — CSV (`text/csv; charset=utf-8`, UTF-8 BOM,
+разделитель `;`, `Content-Disposition: attachment`). Те же фильтры, что у
+`/admin/history`, но без пагинации: одна выгрузка ограничена 5000 последними
+записями. Колонки: дата (`ДД.ММ.ГГГГ ЧЧ:ММ`), редактор («Система» для записей без
+автора), тип сущности, действие, заголовок, подробности, профессия, навык, ID
+объекта — всё на русском.
 
 **`GET /admin/dependencies/broken`** — `{id, skill_id, skill_title,
 prerequisite_id, prerequisite_title, reason, reason_text}`, где `reason` —

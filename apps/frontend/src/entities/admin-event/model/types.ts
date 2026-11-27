@@ -46,6 +46,27 @@ export type AdminEventListParams = {
   skillId?: string;
   entityType?: AdminEntityType;
   action?: AdminAction;
+  /** Автор записи (см. `GET /admin/editors`). */
+  actorId?: string;
+  /** Поиск по заголовку, подробностям и автору. */
+  q?: string;
+  /** Начало периода (ISO), включительно. */
+  createdFrom?: string;
+  /** Конец периода (ISO), включительно. */
+  createdTo?: string;
   limit?: number;
   offset?: number;
+};
+
+/** Автор записей журнала (`GET /admin/editors`) — вариант фильтра «Автор». */
+export type AdminEditor = {
+  actorId: string | null;
+  actorName: string;
+  eventsCount: number;
+  lastEventAt: string | null;
+};
+
+export type AdminEditorList = {
+  items: AdminEditor[];
+  total: number;
 };

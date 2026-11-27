@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping, Sequence
+from datetime import datetime
+from typing import NamedTuple
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +18,9 @@ from app.models.base import utcnow
 
 TITLE_LIMIT = 300
 DETAIL_LIMIT = 1000
+
+# Выгрузка журнала: больше строк отдавать бессмысленно — файл не откроется.
+EXPORT_ROW_LIMIT = 5000
 
 ENTITY_PROFESSION = "profession"
 ENTITY_SKILL = "skill"
@@ -27,6 +32,21 @@ ACTION_UPDATED = "updated"
 ACTION_DELETED = "deleted"
 ACTION_PUBLISHED = "published"
 ACTION_CHECKED = "checked"
+
+ENTITY_TYPE_LABELS: dict[str, str] = {
+    ENTITY_PROFESSION: "профессия",
+    ENTITY_SKILL: "навык",
+    ENTITY_DEPENDENCY: "связь",
+    ENTITY_RESOURCE: "ресурс",
+}
+
+ACTION_LABELS: dict[str, str] = {
+    ACTION_CREATED: "создано",
+    ACTION_UPDATED: "изменено",
+    ACTION_DELETED: "удалено",
+    ACTION_PUBLISHED: "опубликовано",
+    ACTION_CHECKED: "проверено",
+}
 
 PROFESSION_FIELD_LABELS: dict[str, str] = {
     "slug": "slug",
@@ -162,22 +182,31 @@ async def record(
     return event
 
 
-async def list_events(
-    db: AsyncSession,
+def _like_pattern(text: str) -> str:
+    """ILIKE-шаблон с экранированием служебных символов пользовательского ввода."""
+    escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def _event_conditions(
     *,
-    profession_id: uuid.UUID | None = None,
-    skill_id: uuid.UUID | None = None,
-    entity_type: str | None = None,
-    action: str | None = None,
-    limit: int,
-    offset: int,
-) -> tuple[list[AdminEvent], int]:
-    """Лента изменений; `profession_id` включает и события её навыков."""
+    profession_id: uuid.UUID | None,
+    skill_id: uuid.UUID | None,
+    entity_type: str | None,
+    action: str | None,
+    actor_id: uuid.UUID | None,
+    q: str | None,
+    created_from: datetime | None,
+    created_to: datetime | None,
+) -> list:
+    """Общие фильтры журнала: одинаковы для ленты и для выгрузки в CSV."""
     conditions = []
     if entity_type is not None:
         conditions.append(AdminEvent.entity_type == entity_type)
     if action is not None:
         conditions.append(AdminEvent.action == action)
+    if actor_id is not None:
+        conditions.append(AdminEvent.actor_id == actor_id)
     if profession_id is not None:
         conditions.append(
             or_(
@@ -191,6 +220,47 @@ async def list_events(
         )
     if skill_id is not None:
         conditions.append(AdminEvent.skill_id == skill_id)
+    if q and q.strip():
+        pattern = _like_pattern(q.strip())
+        conditions.append(
+            or_(
+                AdminEvent.title.ilike(pattern, escape="\\"),
+                AdminEvent.detail.ilike(pattern, escape="\\"),
+                AdminEvent.actor_name.ilike(pattern, escape="\\"),
+            )
+        )
+    if created_from is not None:
+        conditions.append(AdminEvent.created_at >= created_from)
+    if created_to is not None:
+        conditions.append(AdminEvent.created_at <= created_to)
+    return conditions
+
+
+async def list_events(
+    db: AsyncSession,
+    *,
+    profession_id: uuid.UUID | None = None,
+    skill_id: uuid.UUID | None = None,
+    entity_type: str | None = None,
+    action: str | None = None,
+    actor_id: uuid.UUID | None = None,
+    q: str | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+    limit: int,
+    offset: int,
+) -> tuple[list[AdminEvent], int]:
+    """Лента изменений; `profession_id` включает и события её навыков."""
+    conditions = _event_conditions(
+        profession_id=profession_id,
+        skill_id=skill_id,
+        entity_type=entity_type,
+        action=action,
+        actor_id=actor_id,
+        q=q,
+        created_from=created_from,
+        created_to=created_to,
+    )
 
     total = await db.scalar(select(func.count(AdminEvent.id)).where(*conditions))
     rows = await db.scalars(
@@ -201,3 +271,68 @@ async def list_events(
         .offset(offset)
     )
     return list(rows), total or 0
+
+
+async def export_events(
+    db: AsyncSession,
+    *,
+    profession_id: uuid.UUID | None = None,
+    skill_id: uuid.UUID | None = None,
+    entity_type: str | None = None,
+    action: str | None = None,
+    actor_id: uuid.UUID | None = None,
+    q: str | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+    limit: int = EXPORT_ROW_LIMIT,
+) -> list[AdminEvent]:
+    """Те же записи, что и в ленте, но одной пачкой — для выгрузки в файл."""
+    conditions = _event_conditions(
+        profession_id=profession_id,
+        skill_id=skill_id,
+        entity_type=entity_type,
+        action=action,
+        actor_id=actor_id,
+        q=q,
+        created_from=created_from,
+        created_to=created_to,
+    )
+    rows = await db.scalars(
+        select(AdminEvent)
+        .where(*conditions)
+        .order_by(AdminEvent.created_at.desc(), AdminEvent.id)
+        .limit(limit)
+    )
+    return list(rows)
+
+
+class EditorStat(NamedTuple):
+    """Сколько записей и когда последний раз оставил конкретный автор."""
+
+    actor_id: uuid.UUID | None
+    actor_name: str
+    events_count: int
+    last_event_at: datetime | None
+
+
+async def list_editor_stats(db: AsyncSession) -> list[EditorStat]:
+    """Авторы журнала для фильтра «Автор» — по фактическим записям."""
+    rows = await db.execute(
+        select(
+            AdminEvent.actor_id,
+            func.max(AdminEvent.actor_name),
+            func.count(AdminEvent.id),
+            func.max(AdminEvent.created_at),
+        )
+        .group_by(AdminEvent.actor_id)
+        .order_by(func.max(AdminEvent.created_at).desc())
+    )
+    return [
+        EditorStat(
+            actor_id=row[0],
+            actor_name=row[1] or "",
+            events_count=row[2] or 0,
+            last_event_at=row[3],
+        )
+        for row in rows
+    ]

@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, DbSession, require_role
@@ -22,6 +23,7 @@ from app.models import ProfessionStatus, UserRole
 from app.models.enums import Level
 from app.schemas.admin import (
     AdminAction,
+    AdminEditorList,
     AdminEntityType,
     AdminEventList,
     AdminOverviewRead,
@@ -104,6 +106,46 @@ async def _skill_read(db: AsyncSession, skill_id: uuid.UUID) -> SkillAdminRead:
     )
 
 
+class HistoryFilters:
+    """Фильтры журнала: одни и те же для списка и для выгрузки в CSV."""
+
+    def __init__(
+        self,
+        profession_id: Annotated[
+            uuid.UUID | None, Query(description="Профессия или её навыки")
+        ] = None,
+        skill_id: Annotated[uuid.UUID | None, Query()] = None,
+        entity_type: Annotated[AdminEntityType | None, Query()] = None,
+        action: Annotated[AdminAction | None, Query()] = None,
+        actor_id: Annotated[uuid.UUID | None, Query()] = None,
+        q: Annotated[
+            str | None, Query(max_length=100, description="Поиск по тексту журнала")
+        ] = None,
+        created_from: Annotated[datetime | None, Query()] = None,
+        created_to: Annotated[datetime | None, Query()] = None,
+    ) -> None:
+        self.profession_id = profession_id
+        self.skill_id = skill_id
+        self.entity_type = entity_type
+        self.action = action
+        self.actor_id = actor_id
+        self.q = q
+        self.created_from = created_from
+        self.created_to = created_to
+
+    def as_kwargs(self) -> dict[str, object]:
+        return {
+            "profession_id": self.profession_id,
+            "skill_id": self.skill_id,
+            "entity_type": self.entity_type,
+            "action": self.action,
+            "actor_id": self.actor_id,
+            "q": self.q,
+            "created_from": self.created_from,
+            "created_to": self.created_to,
+        }
+
+
 @router.get("/ping", summary="Проверка прав редактора")
 async def ping() -> dict[str, str]:
     return {"detail": "pong"}
@@ -131,23 +173,52 @@ async def get_overview(
 )
 async def list_history(
     db: DbSession,
-    profession_id: Annotated[uuid.UUID | None, Query()] = None,
-    skill_id: Annotated[uuid.UUID | None, Query()] = None,
-    entity_type: Annotated[AdminEntityType | None, Query()] = None,
-    action_filter: Annotated[AdminAction | None, Query(alias="action")] = None,
+    filters: Annotated[HistoryFilters, Depends()],
     limit: LimitQuery = DEFAULT_ADMIN_LARGE_LIMIT,
     offset: OffsetQuery = 0,
 ):
     items, total = await admin_service.list_history(
-        db,
-        profession_id=profession_id,
-        skill_id=skill_id,
-        entity_type=entity_type,
-        action=action_filter,
-        limit=limit,
-        offset=offset,
+        db, **filters.as_kwargs(), limit=limit, offset=offset
     )
     return AdminEventList(items=items, total=total, limit=limit, offset=offset)
+
+
+@router.get(
+    "/history/export",
+    summary="Выгрузка журнала изменений в CSV",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {"text/csv": {}},
+            "description": "CSV-файл в UTF-8 (BOM для Excel), разделитель «;»",
+        }
+    },
+)
+async def export_history(
+    db: DbSession,
+    filters: Annotated[HistoryFilters, Depends()],
+) -> Response:
+    """Тот же журнал, что и `GET /admin/history`, но файлом — без пагинации."""
+    content = await admin_service.export_history_csv(db, **filters.as_kwargs())
+    filename = f"skillmap-history-{datetime.now(UTC):%Y-%m-%d}.csv"
+    return Response(
+        content=content.encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.get(
+    "/editors",
+    response_model=AdminEditorList,
+    summary="Авторы журнала — варианты фильтра «Автор»",
+)
+async def list_editors(db: DbSession):
+    items = await admin_service.list_editors(db)
+    return AdminEditorList(items=items, total=len(items))
 
 
 # ------------------------------- Профессии ---------------------------------

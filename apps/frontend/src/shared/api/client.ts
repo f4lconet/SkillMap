@@ -194,3 +194,27 @@ export const api = {
   /** Прямой доступ к axios instance при необходимости */
   instance: axiosInstance,
 };
+
+async function download(url: string, params: unknown, isRetry = false): Promise<Blob> {
+  try {
+    const token = getAccessToken();
+    const res = await axiosInstance.get<Blob>(url, {
+      params,
+      responseType: 'blob',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    return res.data;
+  } catch (err) {
+    const apiError = toApiError(err);
+    if (apiError.status === 401 && !isRetry) {
+      const token = await refreshAccessToken();
+      if (token) return download(url, params, true);
+    }
+    throw apiError;
+  }
+}
+
+/** Скачивание файла (CSV и т.п.): тот же токен и refresh-логика, что у `api.get`. */
+export function downloadFile(url: string, params?: unknown): Promise<Blob> {
+  return download(url, params);
+}
