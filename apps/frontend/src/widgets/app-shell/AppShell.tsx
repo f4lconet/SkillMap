@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { UserRole } from '@/entities/user';
 import { cn } from '@/shared/lib/cn';
+import { Logo } from '@/shared/ui';
 import { AppSidebar } from './AppSidebar';
 
 type Props = {
@@ -133,9 +134,7 @@ export function AppShell({
         <div className="sticky top-0 z-40 border-b border-border/60 bg-surface md:hidden">
           <div className="flex h-14 items-center justify-between px-4">
             <Link href="/" className="flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white">
-                S
-              </span>
+              <Logo size={32} />
               <span className="text-base font-semibold text-text">SkillMap</span>
             </Link>
             <button

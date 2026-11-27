@@ -5,6 +5,10 @@ export type { ButtonProps, ButtonVariant, ButtonSize } from './button';
 // Icons
 export { ShareIcon } from './icon';
 
+// Brand
+export { Logo } from './logo';
+export type { LogoProps } from './logo';
+
 // Forms
 export { Input } from './input';
 export type { InputProps, InputState } from './input';

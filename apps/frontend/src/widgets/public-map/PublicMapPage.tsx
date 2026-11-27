@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { Edge, Node } from '@xyflow/react';
-import { Button, Progress } from '@/shared/ui';
+import { Button, Logo, Progress } from '@/shared/ui';
 import {
   SkillMapCanvas,
   buildSkillGraph,
@@ -153,9 +153,7 @@ function PublicMapContent({
       <header className="border-b border-border/70 bg-surface">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white">
-              S
-            </span>
+            <Logo size={32} />
             <span className="text-base font-semibold tracking-tight">SkillMap</span>
           </Link>
           <div className="hidden items-center gap-4 sm:flex sm:gap-5">

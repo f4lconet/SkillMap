@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/shared/lib/cn';
 import { ROUTES } from '@/shared/config';
+import { Logo } from '@/shared/ui';
 
 type PublicationInfo = {
   title: string;
@@ -63,9 +64,7 @@ export function AdminShell({
     <div className="flex min-h-screen bg-page text-text">
       <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 flex-col border-r border-border bg-surface md:flex">
         <div className="flex h-14 items-center gap-2 px-5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white">
-            S
-          </span>
+          <Logo size={32} />
           <span className="text-base font-semibold">SkillMap</span>
         </div>
 

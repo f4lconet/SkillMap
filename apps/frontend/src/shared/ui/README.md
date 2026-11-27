@@ -25,6 +25,7 @@ src/
         ├── node/              # SkillNode (карта навыков)
         ├── nav/               # NavItem
         ├── onboarding/        # OnboardingStep
+        ├── logo/              # Знак бренда (public/logo.svg)
         └── index.ts           # Public API
 ```
 

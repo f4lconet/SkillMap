@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button } from '@/shared/ui';
+import { Button, Logo } from '@/shared/ui';
 import { ApiClientError } from '@/shared/api';
 import { authApi } from '@/features/auth';
 import { professionApi, type ProfessionDetail } from '@/entities/profession';
@@ -204,9 +204,7 @@ export function OnboardingWizard() {
       <header className="sticky top-0 z-40 border-b border-border/60 bg-surface">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white">
-              S
-            </span>
+            <Logo size={32} />
             <span className="text-base font-semibold text-text sm:text-lg">SkillMap</span>
           </Link>
           <div className="flex items-center gap-3">

@@ -52,6 +52,7 @@ Focus-ring: `rgba(83, 87, 217, 0.33)`.
 
 | Компонент | Путь | Варианты / состояния |
 |-----------|------|----------------------|
+| `Logo` | `shared/ui/logo` | знак бренда из `public/logo.svg`, размер через `size` |
 | `Button` | `shared/ui/button` | primary, secondary, github, destructive + hover/focus/disabled |
 | `Input` | `shared/ui/input` | default, focus, error, disabled + label/helper/errorText |
 | `Select` | `shared/ui/select` | то же |

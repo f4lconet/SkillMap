@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/shared/lib/cn';
 import { ROUTES } from '@/shared/config';
-import { Progress } from '@/shared/ui';
+import { Logo, Progress } from '@/shared/ui';
 import { USER_ROLE_LABELS, type UserRole } from '@/entities/user';
 
 const NAV = [
@@ -113,9 +113,7 @@ export function AppSidebar({
         title="На главную"
         className="flex h-14 items-center gap-2 px-5 transition-opacity hover:opacity-80"
       >
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white">
-          S
-        </span>
+        <Logo size={32} />
         <span className="text-base font-semibold text-text">SkillMap</span>
       </Link>
 

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Button } from '@/shared/ui';
+import { Button, Logo } from '@/shared/ui';
 import { useSessionUser } from '@/features/auth';
 import { cn } from '@/shared/lib/cn';
 
@@ -56,9 +56,7 @@ export function SiteHeader() {
           className="flex items-center gap-2"
           aria-label="SkillMap — на главную"
         >
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white">
-            S
-          </span>
+          <Logo size={32} />
           <span className="text-base font-semibold tracking-tight text-text sm:text-lg">
             SkillMap
           </span>
