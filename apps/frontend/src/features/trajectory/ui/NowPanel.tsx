@@ -25,7 +25,7 @@ export function NowPanel({
 }: Props) {
   if (items.length === 0) {
     return (
-      <div className="rounded-2xl border border-border bg-surface p-5 text-body text-secondary">
+      <div className="rounded-2xl border border-border bg-surface p-4 sm:p-5 text-body text-secondary">
         На эту неделю активных навыков нет — всё освоено или план ещё не
         построен.
       </div>
@@ -34,7 +34,7 @@ export function NowPanel({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-accent/15 bg-accent-soft/50 p-5">
+      <div className="rounded-2xl border border-accent/15 bg-accent-soft/50 p-4 sm:p-5">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">
           Неделя {weekNumber} · {weekHours} ч по плану
         </p>
@@ -95,7 +95,7 @@ export function NowPanel({
         </Link>
       </div>
 
-      <div className="rounded-2xl border border-border bg-surface p-5">
+      <div className="rounded-2xl border border-border bg-surface p-4 sm:p-5">
         <p className="text-body font-semibold text-text">План не высечен в камне</p>
         <p className="mt-1.5 text-helper leading-relaxed text-secondary">
           Отметьте кружком слева то, что уже сделали, — прогресс недели

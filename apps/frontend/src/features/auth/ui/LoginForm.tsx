@@ -66,7 +66,7 @@ export function LoginForm() {
   };
 
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6 shadow-soft sm:p-8">
+    <div className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5 shadow-soft sm:p-8">
       <h2 className="text-h3 text-text">С возвращением</h2>
       <p className="mt-1 text-body text-secondary">
         Продолжите с того места, где остановились.

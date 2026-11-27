@@ -167,21 +167,21 @@ export function SkillMapPage() {
 
   return header(
     <>
-    <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6">
+    <div className="mx-auto max-w-[1200px] px-4 py-4 sm:px-6 sm:py-6">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">
             Ваша цель{levelLabel ? ` · ${levelLabel}` : ''}
           </p>
-          <h1 className="mt-1 text-h2 tracking-tight text-text">
+          <h1 className="mt-1 text-[28px] font-semibold leading-tight tracking-tight text-text sm:text-h2">
             {map.professionTitle}
           </h1>
           <p className="mt-1 text-body text-secondary">
             Здесь видно, что вы уже умеете и какой навык откроет следующий шаг
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           {savingId && (
             <span className="text-helper text-secondary">Сохраняем…</span>
           )}
@@ -196,6 +196,7 @@ export function SkillMapPage() {
           <Button
             variant="secondary"
             size="sm"
+            className="w-full sm:w-auto"
             leftIcon={<ShareIcon />}
             onClick={() => void handleShare()}
             isLoading={share.pending === 'enable'}
@@ -364,7 +365,7 @@ export function SkillMapPage() {
       </div>
 
       {/* Graph + panel */}
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_300px]">
+      <div className="mt-5 grid gap-4 lg:mt-6 lg:grid-cols-[1fr_320px] lg:gap-6">
         <div>
           <div className="mb-2 flex items-center justify-between px-1">
             <p className="text-helper text-secondary">

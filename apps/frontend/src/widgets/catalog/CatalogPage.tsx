@@ -118,11 +118,14 @@ export function CatalogPage() {
     <div className="min-h-screen bg-page">
       <SiteHeader />
 
-      <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
-        <h1 className="text-h2 tracking-tight text-text sm:text-[36px]">
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-accent">
+          Найдите свою цель
+        </p>
+        <h1 className="text-[28px] font-semibold leading-tight tracking-tight text-text sm:text-[36px]">
           Кем вы хотите стать?
         </h1>
-        <p className="mt-2 text-body text-secondary">
+        <p className="mt-2 text-sm text-secondary sm:text-body">
           {counts.all > 0 ? `${counts.all} профессий` : 'Профессии'}, понятные требования
           и карта навыков для каждой цели.
         </p>
@@ -130,7 +133,7 @@ export function CatalogPage() {
         {/* Filters */}
         <form
           onSubmit={handleSearchSubmit}
-          className="mt-8 grid gap-3 sm:grid-cols-[1fr_180px_140px_auto] sm:items-end"
+          className="mt-6 grid gap-3 sm:mt-8 sm:grid-cols-[1fr_180px_140px_auto] sm:items-end"
         >
           <div>
             <label className="mb-1.5 block text-label text-text">Поиск профессии</label>
@@ -214,7 +217,7 @@ export function CatalogPage() {
         </div>
 
         {/* Grid */}
-        <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-6 grid gap-4 sm:mt-8 sm:gap-5 md:grid-cols-2 lg:grid-cols-3">
           {loading &&
             Array.from({ length: 6 }).map((_, i) => (
               <div

@@ -19,7 +19,7 @@ export function DashboardGreeting({ userName, professionTitle, level }: Props) {
         <p className="text-[11px] font-semibold tracking-[0.08em] text-accent uppercase">
           {formatToday()}
         </p>
-        <h1 className="mt-1 text-[32px] leading-tight font-bold tracking-tight">
+        <h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[32px]">
           {firstName}, вы движетесь вперёд <span aria-hidden>👋</span>
         </h1>
         <p className="mt-1 text-[15px] text-secondary">

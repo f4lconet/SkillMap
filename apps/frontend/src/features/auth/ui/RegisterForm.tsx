@@ -49,7 +49,7 @@ export function RegisterForm() {
   };
 
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6 shadow-soft sm:p-8">
+    <div className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5 shadow-soft sm:p-8">
       <h2 className="text-h3 text-text">Создать аккаунт</h2>
       <p className="mt-1 text-body text-secondary">Ваш маршрут начнётся здесь.</p>
 

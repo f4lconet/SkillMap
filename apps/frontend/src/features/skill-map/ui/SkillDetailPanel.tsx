@@ -27,7 +27,7 @@ export function SkillDetailPanel({ data, saving, onClose, onSetStatus }: Props) 
   const [detailsHint, setDetailsHint] = useState(false);
 
   return (
-    <aside className="flex h-full w-full flex-col rounded-2xl border border-border bg-surface p-5 shadow-soft lg:w-[300px]">
+    <aside className="flex h-full w-full flex-col rounded-2xl border border-border bg-surface p-4 shadow-soft sm:p-5 lg:w-[300px]">
       <div className="flex items-start justify-between gap-2">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-secondary">
           Выбранный навык

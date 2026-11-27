@@ -4,16 +4,16 @@ import { StartLearningLink } from '@/features/auth';
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden px-4 pb-16 pt-12 sm:px-6 sm:pt-16 lg:pt-20">
-      <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2 lg:gap-16">
+    <section className="relative overflow-hidden px-4 pb-12 pt-8 sm:px-6 sm:pb-16 sm:pt-16 lg:pt-20">
+      <div className="mx-auto grid max-w-6xl items-center gap-8 sm:gap-12 lg:grid-cols-2 lg:gap-16">
         {/* Left: copy */}
         <div className="max-w-xl">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-accent-soft px-3 py-1 text-helper font-medium text-accent">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-accent-soft px-3 py-1 text-helper font-medium text-accent sm:mb-5">
             <span className="h-1.5 w-1.5 rounded-full bg-accent" />
             Карьера начинается с понятного маршрута
           </div>
 
-          <h1 className="text-hero leading-[1.1] tracking-tight text-text sm:text-[52px] sm:leading-[1.15]">
+          <h1 className="text-[32px] font-semibold leading-[1.15] tracking-tight text-text sm:text-[52px]">
             Ваша цель.
             <br />
             Ваши навыки.
@@ -21,23 +21,42 @@ export function Hero() {
             <span className="text-accent">Понятный путь.</span>
           </h1>
 
-          <p className="mt-5 text-body text-secondary sm:text-base sm:leading-relaxed">
+          <p className="mt-4 text-sm leading-relaxed text-secondary sm:mt-5 sm:text-base">
             Превратите «хочу стать разработчиком» в карту навыков и
-            пошаговый план. Узнайте, что уже умеете и что изучать дальше.
+            посильный план. Узнайте, что уже умеете и что изучать дальше.
           </p>
 
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+          <div className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:flex-wrap sm:items-center">
             <StartLearningLink>
-              <Button variant="primary" className="h-11 px-5">
+              <Button
+                variant="primary"
+                className="h-12 w-full px-5 sm:h-11 sm:w-auto"
+              >
                 → Построить мой маршрут
               </Button>
             </StartLearningLink>
-            <Link href="/catalog">
-              <Button variant="secondary" className="h-11 px-5">
-                Посмотреть каталог
+            <Link href="/demo" className="w-full sm:w-auto">
+              <Button
+                variant="secondary"
+                className="h-12 w-full px-5 sm:h-11 sm:w-auto"
+              >
+                Посмотреть демо
               </Button>
             </Link>
           </div>
+
+          <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-secondary sm:mt-5">
+            <span className="inline-flex items-center gap-1.5 text-success">
+              <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-success text-[9px] text-white">
+                ✓
+              </span>
+              Бесплатный старт
+            </span>
+            <span className="text-border">·</span>
+            <span>3 минуты</span>
+            <span className="text-border">·</span>
+            <span>Без карты оплаты</span>
+          </p>
         </div>
 
         {/* Right: map preview card */}

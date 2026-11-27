@@ -62,7 +62,7 @@ export function DashboardPage() {
   if (!dashboard || !hasGoal) {
     return (
       <AppShell {...shellProps}>
-        <div className="mx-auto w-full max-w-[1080px] px-4 py-6 sm:px-6">
+        <div className="mx-auto w-full max-w-[1080px] px-4 py-4 sm:px-6 sm:py-6">
           <DashboardGreeting
             userName={user?.name ?? ''}
             professionTitle={null}
@@ -89,7 +89,7 @@ export function DashboardPage() {
 
   return (
     <AppShell {...shellProps}>
-      <div className="mx-auto w-full max-w-[1080px] px-4 py-6 sm:px-6">
+      <div className="mx-auto w-full max-w-[1080px] px-4 py-4 sm:px-6 sm:py-6">
         <DashboardGreeting
           userName={user?.name ?? ''}
           professionTitle={dashboard.kpi.targetProfessionTitle}
@@ -105,7 +105,7 @@ export function DashboardPage() {
           <LearningRhythm activity={dashboard.weekActivity} />
         </div>
 
-        <div className="mt-5 grid items-stretch gap-5 lg:grid-cols-[1.45fr_0.9fr]">
+        <div className="mt-5 grid items-stretch gap-4 sm:gap-5 lg:grid-cols-[1.45fr_0.9fr]">
           <div className="flex flex-col gap-4">
             <NextStep step={nextStep} kpi={dashboard.kpi} />
             <StudyShortcuts

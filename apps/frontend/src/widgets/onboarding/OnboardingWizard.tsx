@@ -13,7 +13,6 @@ import {
 } from '@/entities/skill';
 import {
   STEP_ORDER,
-  STEP_LABELS,
   USER_LEVEL_LABELS,
   type OnboardingStepId,
   type UserLevel,
@@ -202,19 +201,29 @@ export function OnboardingWizard() {
 
   return (
     <div className="min-h-screen bg-page">
-      <header className="border-b border-border/60 bg-surface">
+      <header className="sticky top-0 z-40 border-b border-border/60 bg-surface">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white">
               S
             </span>
-            <span className="text-lg font-semibold text-text">SkillMap</span>
+            <span className="text-base font-semibold text-text sm:text-lg">SkillMap</span>
           </Link>
-          {userName && <span className="text-sm text-secondary">{userName}</span>}
+          <div className="flex items-center gap-3">
+            {userName && (
+              <span className="hidden text-sm text-secondary sm:inline">{userName}</span>
+            )}
+            <Link
+              href="/catalog"
+              className="inline-flex h-9 items-center rounded-full border border-border bg-surface px-3.5 text-sm font-medium text-text"
+            >
+              Меню
+            </Link>
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
         {loading ? (
           <div className="rounded-2xl border border-border bg-surface px-6 py-16 text-center">
             <p className="text-body text-secondary">Загружаем профессию…</p>
@@ -240,7 +249,12 @@ export function OnboardingWizard() {
           </div>
         ) : (
           <>
-            <h1 className="text-h2 tracking-tight text-text sm:text-[32px]">
+            {step === 'skills' && (
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-accent">
+                Старт за 3 минуты
+              </p>
+            )}
+            <h1 className="text-[28px] font-semibold leading-tight tracking-tight text-text sm:text-[32px]">
               {step === 'skills'
                 ? 'Отметьте то, что уже умеете'
                 : step === 'hours'
@@ -249,7 +263,7 @@ export function OnboardingWizard() {
                     ? 'Выберите целевой уровень'
                     : 'Подтвердите цель'}
             </h1>
-            <p className="mt-2 max-w-2xl text-body text-secondary">
+            <p className="mt-2 max-w-2xl text-sm text-secondary sm:text-body">
               {step === 'skills'
                 ? 'Не начинайте с нуля, если у вас уже есть опыт. Позже отметки можно изменить на карте.'
                 : 'Ответы сохраняются на каждом шаге. Можно вернуться назад.'}
@@ -298,26 +312,35 @@ export function OnboardingWizard() {
             )}
 
             {/* Footer actions */}
-            <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
-              <Button variant="secondary" onClick={goBack}>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+              <Button
+                variant="secondary"
+                onClick={goBack}
+                className="w-full sm:w-auto order-2 sm:order-1"
+              >
                 ← Назад: {backLabel}
               </Button>
-              <p className="text-helper text-secondary">
-                Шаг {stepIndex + 1} из {STEP_ORDER.length} · {STEP_LABELS[step]}
-              </p>
               {step === 'skills' ? (
                 <Button
                   variant="primary"
                   onClick={handleFinish}
                   isLoading={submitting}
+                  className="w-full sm:w-auto order-1 sm:order-3"
                 >
                   ✦ Построить мою карту
                 </Button>
               ) : (
-                <Button variant="primary" onClick={goNext}>
+                <Button
+                  variant="primary"
+                  onClick={goNext}
+                  className="w-full sm:w-auto order-1 sm:order-3"
+                >
                   Далее →
                 </Button>
               )}
+              <p className="order-3 text-center text-helper text-secondary sm:order-2">
+                Шаг {stepIndex + 1} из {STEP_ORDER.length} · Ответы сохранены
+              </p>
             </div>
           </>
         )}

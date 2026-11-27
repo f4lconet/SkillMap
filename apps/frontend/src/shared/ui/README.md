@@ -87,7 +87,6 @@ import {
 // Кнопки
 <Button variant="primary">Сохранить изменения</Button>
 <Button variant="secondary">Изменить пароль</Button>
-<Button variant="github" leftIcon={<GitHubIcon />}>Войти с GitHub</Button>
 <Button variant="destructive">Удалить аккаунт</Button>
 
 // Формы

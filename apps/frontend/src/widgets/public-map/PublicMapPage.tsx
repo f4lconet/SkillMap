@@ -130,6 +130,7 @@ function PublicMapContent({
 }: ContentProps) {
   const profile = loaded ?? EMPTY_VIEW;
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // По умолчанию подсвечиваем ближайший доступный навык — «следующий шаг».
   const nextStepId = useMemo(() => {
@@ -157,10 +158,10 @@ function PublicMapContent({
             </span>
             <span className="text-base font-semibold tracking-tight">SkillMap</span>
           </Link>
-          <div className="flex items-center gap-4 sm:gap-5">
+          <div className="hidden items-center gap-4 sm:flex sm:gap-5">
             <Link
               href="/catalog"
-              className="hidden text-sm font-medium text-secondary hover:text-text sm:inline"
+              className="text-sm font-medium text-secondary hover:text-text"
             >
               Каталог профессий
             </Link>
@@ -176,7 +177,44 @@ function PublicMapContent({
               </Button>
             </Link>
           </div>
+          <button
+            type="button"
+            className="inline-flex h-9 items-center rounded-full border border-border bg-surface px-3.5 text-sm font-medium text-text sm:hidden"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-expanded={menuOpen}
+            aria-controls="public-mobile-menu"
+          >
+            Меню
+          </button>
         </div>
+        {menuOpen && (
+          <div
+            id="public-mobile-menu"
+            className="border-t border-border px-4 py-3 sm:hidden"
+          >
+            <Link
+              href="/catalog"
+              className="block rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-page"
+              onClick={() => setMenuOpen(false)}
+            >
+              Каталог профессий
+            </Link>
+            <Link
+              href="/auth"
+              className="block rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-page"
+              onClick={() => setMenuOpen(false)}
+            >
+              Войти
+            </Link>
+            <Link
+              href="/onboarding"
+              className="mt-2 flex h-11 items-center justify-center rounded-lg bg-accent text-sm font-semibold text-white"
+              onClick={() => setMenuOpen(false)}
+            >
+              Создать свою карту
+            </Link>
+          </div>
+        )}
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
@@ -274,7 +312,7 @@ function PublicMapContent({
                 selectedId={activeId}
                 onSelect={setSelectedId}
                 readOnly
-                className="h-[440px] w-full rounded-xl"
+                className="h-[320px] w-full rounded-xl sm:h-[440px]"
               />
             </div>
 
@@ -296,7 +334,7 @@ function PublicMapContent({
           связи.
         </p>
 
-        <section className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-[#182137] px-6 py-5 text-white">
+        <section className="mt-6 flex flex-col gap-4 rounded-2xl bg-[#182137] px-5 py-5 text-white sm:mt-8 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-6">
           <div className="flex items-start gap-3">
             <span className="mt-0.5 text-xl opacity-90" aria-hidden>
               ⧉
@@ -313,7 +351,7 @@ function PublicMapContent({
           <Link href="/onboarding">
             <Button
               variant="primary"
-              className="shrink-0 bg-accent hover:bg-[#4448C4]"
+              className="w-full shrink-0 bg-accent hover:bg-[#4448C4] sm:w-auto"
             >
               → Начать бесплатно
             </Button>

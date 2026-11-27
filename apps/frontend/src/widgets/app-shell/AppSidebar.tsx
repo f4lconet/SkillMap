@@ -12,7 +12,7 @@ const NAV = [
   { href: '/trajectory', label: 'Траектория', icon: 'path', ready: true },
   { href: '/gap', label: 'Gap Analysis', icon: 'gap', ready: true },
   { href: '/dashboard', label: 'Дашборд', icon: 'chart', ready: true },
-  { href: '/integrations', label: 'Интеграции', icon: 'plug', ready: false },
+  { href: '/integrations', label: 'Интеграции', icon: 'plug', ready: true },
   { href: '/profile', label: 'Профиль', icon: 'user', ready: true },
 ] as const;
 

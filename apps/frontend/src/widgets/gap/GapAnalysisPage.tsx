@@ -124,7 +124,7 @@ export function GapAnalysisPage() {
     return (
       <AppShell {...shellProps}>
         <div className="mx-auto max-w-[1200px] px-4 py-16 sm:px-6">
-          <h1 className="text-h2 tracking-tight text-text">Цель пока не выбрана</h1>
+          <h1 className="text-[28px] font-semibold leading-tight tracking-tight text-text sm:text-h2">Цель пока не выбрана</h1>
           <p className="mt-2 max-w-xl text-body leading-relaxed text-secondary">
             Выберите профессию и отметьте известные навыки — после этого покажем,
             что осталось освоить и сколько времени это займёт.
@@ -143,7 +143,7 @@ export function GapAnalysisPage() {
     return (
       <AppShell {...shellProps}>
         <div className="mx-auto max-w-[1200px] px-4 py-16 sm:px-6">
-          <h1 className="text-h2 tracking-tight text-text">
+          <h1 className="text-[28px] font-semibold leading-tight tracking-tight text-text sm:text-h2">
             Gap Analysis ещё не готов
           </h1>
           <p className="mt-2 max-w-xl text-body leading-relaxed text-secondary">
@@ -168,14 +168,14 @@ export function GapAnalysisPage() {
   return (
     <>
       <AppShell {...shellProps}>
-        <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6">
+        <div className="mx-auto max-w-[1200px] px-4 py-4 sm:px-6 sm:py-6">
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">
               Сравнение с целью{levelLabel ? ` · ${levelLabel}` : ''}
             </p>
-            <h1 className="mt-1 text-h2 tracking-tight text-text">
+            <h1 className="mt-1 text-[28px] font-semibold leading-tight tracking-tight text-text sm:text-h2">
               Ваши сильные стороны и точки роста
             </h1>
             <p className="mt-1 text-body text-secondary">
@@ -186,6 +186,7 @@ export function GapAnalysisPage() {
           <div className="flex flex-col items-end gap-2">
             <Button
               variant="primary"
+              className="w-full sm:w-auto"
               onClick={() => void handleExportPdf()}
               isLoading={exportPending}
               disabled={!user.targetProfession}

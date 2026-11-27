@@ -38,7 +38,7 @@ export function PublicMapSection({ hasProfession }: Props) {
   return (
     <section
       id="public-map"
-      className="rounded-2xl border border-border bg-surface p-6"
+      className="rounded-2xl border border-border bg-surface p-4 sm:p-6"
     >
       <div className="flex items-start justify-between gap-4">
         <div>

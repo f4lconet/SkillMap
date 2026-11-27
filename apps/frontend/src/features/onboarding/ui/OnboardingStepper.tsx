@@ -5,11 +5,6 @@ import {
   type OnboardingStepId,
 } from '../model/types';
 
-type StepMeta = {
-  id: OnboardingStepId;
-  subtitle: string;
-};
-
 type Props = {
   current: OnboardingStepId;
   meta: Record<OnboardingStepId, string>;

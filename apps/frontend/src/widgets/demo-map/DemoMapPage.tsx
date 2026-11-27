@@ -24,7 +24,12 @@ const LOAD_ERROR =
 
 type MapState = { professionId: string; map: ProfessionMap };
 
-export function DemoMapPage() {
+type Props = {
+  /** Профессия из ?profession= (id или slug), открывается первой. */
+  initialProfessionId?: string;
+};
+
+export function DemoMapPage({ initialProfessionId }: Props = {}) {
   const { user } = useSessionUser();
   const [professions, setProfessions] = useState<Profession[] | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -46,6 +51,14 @@ export function DemoMapPage() {
           if (current && ready.some((profession) => profession.id === current)) {
             return current;
           }
+          if (initialProfessionId) {
+            const requested = ready.find(
+              (profession) =>
+                profession.id === initialProfessionId ||
+                profession.slug === initialProfessionId
+            );
+            if (requested) return requested.id;
+          }
           const preferred =
             ready.find((profession) => profession.slug === DEFAULT_SLUG) ??
             ready[0];
@@ -61,7 +74,7 @@ export function DemoMapPage() {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [reloadKey, initialProfessionId]);
 
   useEffect(() => {
     if (!activeId) return;

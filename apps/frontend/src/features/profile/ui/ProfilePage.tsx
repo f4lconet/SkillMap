@@ -154,7 +154,7 @@ function ProfileSettingsForm({
   return (
     <section
       id="profile-settings"
-      className="rounded-2xl border border-border bg-surface p-6"
+      className="rounded-2xl border border-border bg-surface p-4 sm:p-6"
     >
       <h2 className="text-section text-text">Личные данные и цель</h2>
 
@@ -211,6 +211,7 @@ function ProfileSettingsForm({
         </p>
         <Button
           variant="primary"
+          className="w-full sm:w-auto"
           onClick={() => void handleSave()}
           isLoading={saving}
           disabled={!dirty || saving}
@@ -319,10 +320,10 @@ export function ProfilePage() {
       goalProgress={progressPercent}
       userLevel={USER_LEVEL_LABELS[user.level ?? 'beginner']}
     >
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="mx-auto max-w-5xl px-4 py-4 sm:px-6 sm:py-8">
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div>
-            <h1 className="text-h2 tracking-tight text-text">Ваш профиль</h1>
+            <h1 className="text-[28px] font-semibold leading-tight tracking-tight text-text sm:text-h2">Ваш профиль</h1>
             <p className="mt-1 text-body text-secondary">
               Личные данные, учебная цель и настройки публичной карты.
             </p>
@@ -330,6 +331,7 @@ export function ProfilePage() {
           <Button
             variant="secondary"
             size="sm"
+            className="w-full sm:w-auto"
             onClick={() => void handleLogout()}
           >
             Выйти из аккаунта
@@ -345,7 +347,7 @@ export function ProfilePage() {
         <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_280px]">
           <div className="space-y-5">
             {/* Basic info */}
-            <section className="rounded-2xl border border-border bg-surface p-6">
+            <section className="rounded-2xl border border-border bg-surface p-4 sm:p-6">
               <h2 className="text-section text-text">Основная информация</h2>
               <div className="mt-4 flex items-center gap-3">
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-accent-soft text-section font-semibold text-accent">
@@ -410,7 +412,7 @@ export function ProfilePage() {
             <PublicMapSection hasProfession={Boolean(user.targetProfession)} />
 
             {/* Notifications */}
-            <section className="rounded-2xl border border-border bg-surface p-6">
+            <section className="rounded-2xl border border-border bg-surface p-4 sm:p-6">
               <div className="flex items-center gap-2">
                 <h2 className="text-section text-text">
                   Уведомления и безопасность

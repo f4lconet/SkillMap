@@ -29,7 +29,7 @@ export function SkillsStep({ skills, selectedIds, onChange }: Props) {
   const unmarked = skills.length - marked;
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-6 sm:p-8">
+    <div className="rounded-2xl border border-border bg-surface p-4 sm:p-8">
       <h2 className="text-section text-text">Что вы можете применить на практике?</h2>
       <p className="mt-1 text-body text-secondary">
         Отмечайте навык, если можете решить базовую задачу без пошаговой инструкции.

@@ -3,7 +3,7 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { cn } from '@/shared/lib/cn';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'github' | 'destructive';
+export type ButtonVariant = 'primary' | 'secondary' | 'destructive';
 export type ButtonSize = 'md' | 'sm';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -23,12 +23,6 @@ const variantStyles: Record<ButtonVariant, string> = {
     'disabled:bg-[#A1AABC] disabled:text-white disabled:cursor-not-allowed'
   ),
   secondary: cn(
-    'bg-surface text-text border border-border',
-    'hover:bg-[#F6F7FB]',
-    'focus-visible:ring-[3px] focus-visible:ring-[rgba(83,87,217,0.33)] focus-visible:border-accent',
-    'disabled:bg-surface disabled:text-[#A1AABC] disabled:border-border disabled:cursor-not-allowed'
-  ),
-  github: cn(
     'bg-surface text-text border border-border',
     'hover:bg-[#F6F7FB]',
     'focus-visible:ring-[3px] focus-visible:ring-[rgba(83,87,217,0.33)] focus-visible:border-accent',

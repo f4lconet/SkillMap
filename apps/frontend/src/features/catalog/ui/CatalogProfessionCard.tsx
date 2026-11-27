@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { type Profession, LEVEL_LABELS } from '@/entities/profession';
 import { Button, Badge } from '@/shared/ui';
 import { cn } from '@/shared/lib/cn';
@@ -48,10 +49,17 @@ export function CatalogProfessionCard({
         {entryLevel ? ` · ${LEVEL_LABELS[entryLevel]}` : ''}
       </p>
 
-      <div className="mt-4 flex items-center justify-end gap-2">
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <Link
+          href={`/demo?profession=${id}`}
+          className="text-sm font-medium text-accent hover:underline"
+        >
+          Посмотреть карту ↗
+        </Link>
         <Button
           variant={selected ? 'primary' : 'secondary'}
           size="sm"
+          className="w-full sm:w-auto"
           onClick={() => onSelect?.(id)}
         >
           {selected ? '✓ Выбрано' : 'Выбрать цель'}

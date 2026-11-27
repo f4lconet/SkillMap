@@ -92,7 +92,7 @@ export function TrajectoryPage() {
     return (
       <AppShell {...shellProps}>
         <div className="mx-auto max-w-[1200px] px-4 py-16 sm:px-6">
-          <h1 className="text-h2 tracking-tight text-text">Траектория пока пуста</h1>
+          <h1 className="text-[28px] font-semibold leading-tight tracking-tight text-text sm:text-h2">Траектория пока пуста</h1>
           <p className="mt-2 max-w-xl text-body leading-relaxed text-secondary">
             Выберите профессию и отметьте уже известные навыки — после этого
             появится план по неделям с ресурсами и ближайшими шагами.
@@ -109,7 +109,7 @@ export function TrajectoryPage() {
 
   return (
     <AppShell {...shellProps}>
-      <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6">
+      <div className="mx-auto max-w-[1200px] px-4 py-4 sm:px-6 sm:py-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">

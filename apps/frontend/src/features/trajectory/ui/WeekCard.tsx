@@ -123,7 +123,7 @@ export function WeekCard({
   }
 
   return (
-    <div className="rounded-2xl border-2 border-accent/30 bg-surface p-5 shadow-soft sm:p-6">
+    <div className="rounded-2xl border-2 border-accent/30 bg-surface p-4 shadow-soft sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="text-section text-text">
